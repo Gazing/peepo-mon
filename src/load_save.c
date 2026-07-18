@@ -5,6 +5,7 @@
 #include "follower_npc.h"
 #include "item.h"
 #include "load_save.h"
+#include "peepo_net.h" // PeepoNet_IsNetworkedLocalId — keep networked objects out of the save
 #include "main.h"
 #include "overworld.h"
 #include "pokemon.h"
@@ -200,7 +201,9 @@ void SaveObjectEvents(void)
     int i;
     u16 graphicsId;
 
-    for (i = 0; i < OBJECT_EVENTS_COUNT; i++)
+    // Only the first OBJECT_EVENTS_COUNT_SAVED slots are persisted; the extra
+    // runtime slots hold transient networked/placed objects re-derived on load.
+    for (i = 0; i < OBJECT_EVENTS_COUNT_SAVED; i++)
     {
         gSaveBlock1Ptr->objectEvents[i] = gObjectEvents[i];
         // Swap graphicsId bytes when saving and loading
@@ -212,6 +215,12 @@ void SaveObjectEvents(void)
         // To avoid crash on vanilla, save follower as inactive
         if (gObjectEvents[i].localId == OBJ_EVENT_ID_FOLLOWER)
             gSaveBlock1Ptr->objectEvents[i].active = FALSE;
+        // PEEPO: never persist a networked/placed object (other players, their
+        // followers, map-editor objects, the cursor). They live server-side and
+        // are re-derived each map load, so save them inactive so they can't leak
+        // into the player's save as phantom NPCs.
+        if (PeepoNet_IsNetworkedLocalId(gObjectEvents[i].localId))
+            gSaveBlock1Ptr->objectEvents[i].active = FALSE;
     }
 }
 
@@ -220,7 +229,9 @@ void LoadObjectEvents(void)
     int i;
     u16 graphicsId;
 
-    for (i = 0; i < OBJECT_EVENTS_COUNT; i++)
+    // Only the first OBJECT_EVENTS_COUNT_SAVED slots are persisted; the extra
+    // runtime slots hold transient networked/placed objects re-derived on load.
+    for (i = 0; i < OBJECT_EVENTS_COUNT_SAVED; i++)
     {
         gObjectEvents[i] = gSaveBlock1Ptr->objectEvents[i];
         // Swap graphicsId bytes when saving and loading
@@ -236,6 +247,11 @@ void LoadObjectEvents(void)
             !gObjectEvents[i].active &&
             gObjectEvents[i].graphicsId & OBJ_EVENT_MON)
             gObjectEvents[i].active = TRUE;
+        // PEEPO: never restore a networked/placed object from the save (the live
+        // network re-derives them). Also scrubs phantoms from any save written
+        // before the save-side guard existed.
+        if (PeepoNet_IsNetworkedLocalId(gObjectEvents[i].localId))
+            gObjectEvents[i].active = FALSE;
     }
 }
 

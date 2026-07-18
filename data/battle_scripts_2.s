@@ -240,6 +240,13 @@ BattleScript_TrainerBallBlock::
 	waitmessage B_WAIT_TIME_LONG
 	finishaction
 
+@ Hardcore nuzlocke: throwing a ball when you've already caught on this route.
+BattleScript_PeepoRouteBallBlock::
+	waitmessage B_WAIT_TIME_LONG
+	printstring STRINGID_PEEPO_ROUTE_CAUGHT
+	waitmessage B_WAIT_TIME_LONG
+	finishaction
+
 BattleScript_RunByUsingItem::
 	playse SE_FLEE
 	setbyte gBattleOutcome, B_OUTCOME_RAN

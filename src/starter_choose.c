@@ -10,6 +10,7 @@
 #include "palette.h"
 #include "pokedex.h"
 #include "pokemon.h"
+#include "peepo_rando.h"
 #include "scanline_effect.h"
 #include "sound.h"
 #include "sprite.h"
@@ -495,8 +496,8 @@ static void Task_HandleStarterChooseInput(u8 taskId)
         spriteId = CreateSprite(&sSpriteTemplate_StarterCircle, sPokeballCoords[selection][0], sPokeballCoords[selection][1], 1);
         gTasks[taskId].tCircleSpriteId = spriteId;
 
-        // Create Pokémon sprite
-        spriteId = CreatePokemonFrontSprite(GetStarterPokemon(gTasks[taskId].tStarterSelection), sPokeballCoords[selection][0], sPokeballCoords[selection][1]);
+        // Create Pokémon sprite (preview the randomized mon you'll actually get)
+        spriteId = CreatePokemonFrontSprite(PeepoRando_MapSpecies(GetStarterPokemon(gTasks[taskId].tStarterSelection), RANDO_KIND_GIFT), sPokeballCoords[selection][0], sPokeballCoords[selection][1]);
         gSprites[spriteId].affineAnims = &sAffineAnims_StarterPokemon;
         gSprites[spriteId].callback = SpriteCB_StarterPokemon;
 
@@ -527,7 +528,7 @@ static void Task_WaitForStarterSprite(u8 taskId)
 
 static void Task_AskConfirmStarter(u8 taskId)
 {
-    PlayCry_Normal(GetStarterPokemon(gTasks[taskId].tStarterSelection), 0);
+    PlayCry_Normal(PeepoRando_MapSpecies(GetStarterPokemon(gTasks[taskId].tStarterSelection), RANDO_KIND_GIFT), 0);
     FillWindowPixelBuffer(0, PIXEL_FILL(1));
     AddTextPrinterParameterized(0, FONT_NORMAL, gText_ConfirmStarterChoice, 0, 1, 0, NULL);
     ScheduleBgCopyTilemapToVram(0);
@@ -575,7 +576,9 @@ static void CreateStarterPokemonLabel(u8 selection)
     s32 width;
     u8 labelLeft, labelRight, labelTop, labelBottom;
 
-    u16 species = GetStarterPokemon(selection);
+    // Label the randomized mon you'll actually receive (deterministic, so it
+    // matches what the give path creates), not the original starter.
+    u16 species = PeepoRando_MapSpecies(GetStarterPokemon(selection), RANDO_KIND_GIFT);
     CopyMonCategoryText(species, categoryText);
     speciesName = GetSpeciesName(species);
 

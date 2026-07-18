@@ -1,8 +1,11 @@
 #include "global.h"
+#include "peepo_rando.h"
 #include "battle_setup.h"
+#include "script_pokemon_util.h" // CreateScriptedWildMon (admin force-specific-mon)
 #include "battle_pike.h"
 #include "battle_pyramid.h"
 #include "event_data.h"
+#include "peepo_qol.h"
 #include "fieldmap.h"
 #include "fishing.h"
 #include "follower_npc.h"
@@ -376,6 +379,28 @@ static u8 ChooseWildMonLevel(const struct WildPokemon *wildPokemon, u8 wildMonIn
     }
 }
 
+// PEEPO TEST — every generation's starters (9 gens × 3), rolled as the wild
+// species in Littleroot Town so editor-placed tall grass there can be used to test
+// encounters. A land table only holds 12 slots, so the full 27 come from this
+// override rather than a real encounter table. Remove for a production build.
+static const u16 sPeepoTestStarters[] = {
+    SPECIES_BULBASAUR,  SPECIES_CHARMANDER, SPECIES_SQUIRTLE,
+    SPECIES_CHIKORITA,  SPECIES_CYNDAQUIL,  SPECIES_TOTODILE,
+    SPECIES_TREECKO,    SPECIES_TORCHIC,    SPECIES_MUDKIP,
+    SPECIES_TURTWIG,    SPECIES_CHIMCHAR,   SPECIES_PIPLUP,
+    SPECIES_SNIVY,      SPECIES_TEPIG,      SPECIES_OSHAWOTT,
+    SPECIES_CHESPIN,    SPECIES_FENNEKIN,   SPECIES_FROAKIE,
+    SPECIES_ROWLET,     SPECIES_LITTEN,     SPECIES_POPPLIO,
+    SPECIES_GROOKEY,    SPECIES_SCORBUNNY,  SPECIES_SOBBLE,
+    SPECIES_SPRIGATITO, SPECIES_FUECOCO,    SPECIES_QUAXLY,
+};
+
+static bool8 PeepoTestOnStarterMap(void)
+{
+    return gSaveBlock1Ptr->location.mapGroup == MAP_GROUP(MAP_LITTLEROOT_TOWN)
+        && gSaveBlock1Ptr->location.mapNum == MAP_NUM(MAP_LITTLEROOT_TOWN);
+}
+
 u16 GetCurrentMapWildMonHeaderId(void)
 {
     u16 i;
@@ -401,6 +426,17 @@ u16 GetCurrentMapWildMonHeaderId(void)
 
             return i;
         }
+    }
+
+    // PEEPO TEST: Littleroot has no wild table of its own — borrow Route 101's so
+    // placed tall grass triggers encounters (species is overridden to a starter in
+    // TryGenerateWildMon). Uses Route 101's rate/levels.
+    if (PeepoTestOnStarterMap())
+    {
+        for (i = 0; gWildMonHeaders[i].mapGroup != MAP_GROUP(MAP_UNDEFINED); i++)
+            if (gWildMonHeaders[i].mapGroup == MAP_GROUP(MAP_ROUTE101)
+                && gWildMonHeaders[i].mapNum == MAP_NUM(MAP_ROUTE101))
+                return i;
     }
 
     return HEADER_NONE;
@@ -479,6 +515,8 @@ u8 PickWildMonNature(void)
 void CreateWildMon(u16 species, u8 level)
 {
     bool32 checkCuteCharm = TRUE;
+
+    species = PeepoRando_MapSpecies(species, RANDO_KIND_WILD);
 
     ZeroEnemyPartyMons();
 
@@ -572,7 +610,12 @@ static bool8 TryGenerateWildMon(const struct WildPokemonInfo *wildMonInfo, enum 
     if (gMapHeader.mapLayoutId != LAYOUT_BATTLE_FRONTIER_BATTLE_PIKE_ROOM_WILD_MONS && flags & WILD_CHECK_KEEN_EYE && !IsAbilityAllowingEncounter(level))
         return FALSE;
 
-    CreateWildMon(wildMonInfo->wildPokemon[wildMonIndex].species, level);
+    {
+        u16 species = wildMonInfo->wildPokemon[wildMonIndex].species;
+        if (PeepoTestOnStarterMap()) // PEEPO TEST: roll a random starter in Littleroot
+            species = sPeepoTestStarters[Random() % ARRAY_COUNT(sPeepoTestStarters)];
+        CreateWildMon(species, level);
+    }
     return TRUE;
 }
 
@@ -1048,6 +1091,43 @@ u16 GetLocalWaterMon(void)
     return SPECIES_NONE;
 }
 
+// peepo: admin "force encounter" — generate a wild mon from the current map's LAND table
+// and start the battle immediately, ignoring the rate roll + repel/keen-eye (flags 0). A
+// no-op on maps with no land encounters (indoors / pure-water) so it can't wedge the field.
+// The caller (PeepoOverworld_Update) only invokes it when freely on the field.
+void PeepoForceEncounter(void)
+{
+    u16 headerId = GetCurrentMapWildMonHeaderId();
+    enum TimeOfDay timeOfDay;
+    const struct WildPokemonInfo *landInfo;
+
+    if (headerId == HEADER_NONE)
+        return;
+    timeOfDay = GetTimeOfDayForEncounters(headerId, WILD_AREA_LAND);
+    landInfo = gWildMonHeaders[headerId].encounterTypes[timeOfDay].landMonsInfo;
+    if (landInfo == NULL)
+        return;
+    if (TryGenerateWildMon(landInfo, WILD_AREA_LAND, 0) == TRUE)
+        BattleSetup_StartWildBattle();
+}
+
+// peepo: admin "force a SPECIFIC mon" — build gEnemyParty[0] as the given species/level
+// (exactly what the game's setwildbattle does), then start it via the ordinary wild-battle
+// path so it returns to the field cleanly (CB2_EndWildBattle, no script). species 0 falls
+// back to a random local encounter. Works anywhere (indoors too) since we supply the mon.
+void PeepoForceEncounterSpecies(u16 species, u8 level)
+{
+    if (species == 0)
+    {
+        PeepoForceEncounter();
+        return;
+    }
+    if (level == 0)
+        level = 5;
+    CreateScriptedWildMon(species, level, 0); // fills gEnemyParty[0]
+    BattleSetup_StartWildBattle();            // consumes gEnemyParty[0] (doesn't regenerate)
+}
+
 bool8 UpdateRepelCounter(void)
 {
     u16 repelLureVar = VarGet(VAR_REPEL_STEP_COUNT);
@@ -1088,6 +1168,12 @@ bool8 UpdateRepelCounter(void)
 static bool8 IsWildLevelAllowedByRepel(u8 wildLevel)
 {
     u8 i;
+
+    // Super Repel (QOL toggle): while ON, block ALL wild encounters outright — a true
+    // "super" repel, not the vanilla level-based one (which is why it looked like it did
+    // nothing when wild mons were at/above the lead mon's level).
+    if (FlagGet(FLAG_PEEPO_SUPER_REPEL))
+        return FALSE;
 
     if (!REPEL_STEP_COUNT)
         return TRUE;

@@ -1,4 +1,5 @@
 #include "global.h"
+#include "peepo_rando.h"
 #include "bg.h"
 #include "decompress.h"
 #include "event_data.h"
@@ -465,7 +466,10 @@ static bool8 MonListHasSpecies(const struct WildPokemonInfo *info, u16 species, 
     {
         for (i = 0; i < size; i++)
         {
-            if (info->wildPokemon[i].species == species)
+            // Compare against the RANDOMIZED species (no-op when the randomizer is off),
+            // so the dex "area" map highlights where the mon actually spawns now, not
+            // where the original species used to be.
+            if (PeepoRando_MapSpecies(info->wildPokemon[i].species, RANDO_KIND_WILD) == species)
                 return TRUE;
         }
     }

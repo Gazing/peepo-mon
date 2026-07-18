@@ -74,7 +74,16 @@
 // capacities of various saveblock objects
 #define DAYCARE_MON_COUNT 2
 #define POKEBLOCKS_COUNT 40
-#define OBJECT_EVENTS_COUNT 16
+// PEEPO: runtime object-event slots. Decoupled from the SAVED count below so we
+// can add slots for networked/placed object events (remote players, followers,
+// map-editor placed objects) WITHOUT changing the save layout. Only the first
+// OBJECT_EVENTS_COUNT_SAVED slots are persisted (SaveBlock1.objectEvents); the
+// rest are transient and re-derived from the network each map load.
+#define OBJECT_EVENTS_COUNT 24
+// The original (vanilla) count — frozen as the SaveBlock1.objectEvents capacity
+// and the bound for Save/LoadObjectEvents, so raising the runtime count above
+// never shifts flags/vars/etc. in the save (no save break, no sector overflow).
+#define OBJECT_EVENTS_COUNT_SAVED 16
 #define MAIL_COUNT (10 + PARTY_SIZE)
 #define SECRET_BASES_COUNT 20
 #define POKE_NEWS_COUNT 16

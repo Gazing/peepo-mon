@@ -1,4 +1,5 @@
 #include "global.h"
+#include "peepo_hardcore.h"
 #include "battle.h"
 #include "battle_hold_effects.h"
 #include "battle_message.h"
@@ -13556,6 +13557,13 @@ static void Cmd_handleballthrow(void)
         MarkBattlerForControllerExec(gBattlerAttacker);
         gBattlescriptCurrInstr = BattleScript_WallyBallThrow;
     }
+    else if (PeepoHardcore_IsEnabled() && PeepoHardcore_RouteAlreadyCaught())
+    {
+        // Hardcore nuzlocke: one catch per route — bounce the ball with a message.
+        BtlController_EmitBallThrowAnim(gBattlerAttacker, B_COMM_TO_CONTROLLER, BALL_TRAINER_BLOCK);
+        MarkBattlerForControllerExec(gBattlerAttacker);
+        gBattlescriptCurrInstr = BattleScript_PeepoRouteBallBlock;
+    }
     else
     {
         u32 odds, i;
@@ -13759,6 +13767,8 @@ static void Cmd_handleballthrow(void)
             MarkBattlerForControllerExec(gBattlerAttacker);
             TryBattleFormChange(gBattlerTarget, FORM_CHANGE_END_BATTLE);
             gBattlescriptCurrInstr = BattleScript_SuccessBallThrow;
+            if (PeepoHardcore_IsEnabled()) // hardcore: this route's one catch is used up
+                PeepoHardcore_MarkRouteCaught();
             struct Pokemon *caughtMon = GetBattlerMon(gBattlerTarget);
             SetMonData(caughtMon, MON_DATA_POKEBALL, &ballId);
 
@@ -13827,6 +13837,8 @@ static void Cmd_handleballthrow(void)
                 }
                 TryBattleFormChange(gBattlerTarget, FORM_CHANGE_END_BATTLE);
                 gBattlescriptCurrInstr = BattleScript_SuccessBallThrow;
+                if (PeepoHardcore_IsEnabled()) // hardcore: this route's one catch is used up
+                    PeepoHardcore_MarkRouteCaught();
                 struct Pokemon *caughtMon = GetBattlerMon(gBattlerTarget);
                 SetMonData(caughtMon, MON_DATA_POKEBALL, &ballId);
 

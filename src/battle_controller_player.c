@@ -2410,13 +2410,22 @@ static u32 CheckTargetTypeEffectiveness(u32 battler)
 
 static void MoveSelectionDisplayMoveEffectiveness(u32 foeEffectiveness, u32 battler)
 {
+    // Effectiveness glyphs are now COLORED for readability (were all mono dark-gray).
+    // The battle text palette (palette 5) has a red at index 1 but NO green, so we patch
+    // a green into a free slot (index 6) below and reference it via {COLOR 6}; {COLOR 1}
+    // is the existing red. (Named codes like {COLOR GREEN}/{COLOR RED} don't apply here —
+    // the battle text palette isn't in the standard text-color index layout.)
     static const u8 noIcon[] =  _("");
     static const u8 effectiveIcon[] =  _("{CIRCLE_HOLLOW}");
-    static const u8 superEffectiveIcon[] =  _("{CIRCLE_DOT}");
-    static const u8 notVeryEffectiveIcon[] =  _("{TRIANGLE}");
-    static const u8 immuneIcon[] =  _("{BIG_MULT_X}");
+    static const u8 superEffectiveIcon[] =  _("{COLOR 6}{CIRCLE_DOT}");   // green  = super effective
+    static const u8 notVeryEffectiveIcon[] =  _("{COLOR 1}{TRIANGLE}");   // red    = not very effective
+    static const u8 immuneIcon[] =  _("{COLOR 1}{BIG_MULT_X}");           // red    = no effect
+    static const u16 sSuperEffectiveGreen = RGB(0, 22, 0);
     struct ChooseMoveStruct *moveInfo = (struct ChooseMoveStruct *)(&gBattleResources->bufferA[battler][4]);
     u8 *txtPtr;
+
+    // Put the green into the free palette-5 slot the {COLOR 6} super-effective glyph uses.
+    LoadPalette(&sSuperEffectiveGreen, BG_PLTT_ID(5) + 6, sizeof(sSuperEffectiveGreen));
 
     txtPtr = StringCopy(gDisplayedStringBattle, gText_MoveInterfacePP);
 

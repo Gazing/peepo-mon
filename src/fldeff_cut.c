@@ -6,6 +6,7 @@
 #include "field_camera.h"
 #include "field_effect.h"
 #include "field_player_avatar.h"
+#include "peepo_mapedit.h"
 #include "fieldmap.h"
 #include "fldeff.h"
 #include "malloc.h"
@@ -143,6 +144,15 @@ bool32 SetUpFieldMove_Cut(void)
     enum Ability userAbility;
     bool8 cutTiles[CUT_NORMAL_AREA];
     bool8 ret;
+
+    // Peepo: an editor-placed tree is deleted (networked) instead of run through the
+    // vanilla scripted-tree path, which expects a real map object.
+    if (PeepoMapEdit_PlacedFieldMoveTarget(OBJ_EVENT_GFX_CUTTABLE_TREE))
+    {
+        gFieldCallback2 = FieldCallback_PrepareFadeInFromMenu;
+        gPostMenuFieldCallback = PeepoMapEdit_DoFieldMovePlaced;
+        return TRUE;
+    }
 
     if (CheckObjectGraphicsInFrontOfPlayer(OBJ_EVENT_GFX_CUTTABLE_TREE) == TRUE)
     {

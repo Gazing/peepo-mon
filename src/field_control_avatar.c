@@ -28,6 +28,10 @@
 #include "pokemon.h"
 #include "safari_zone.h"
 #include "script.h"
+#include "peepo_overworld.h"
+#include "peepo_qol.h"
+#include "peepo_net.h"
+#include "peepo_mapedit.h"
 #include "secret_base.h"
 #include "sound.h"
 #include "start_menu.h"
@@ -231,8 +235,11 @@ int ProcessPlayerFieldInput(struct FieldInput *input)
     if (input->tookStep && TryFindHiddenPokemon())
         return TRUE;
 
-    if (input->pressedSelectButton && UseRegisteredKeyItemOnField() == TRUE)
+    if (input->pressedSelectButton)
+    {
+        PeepoQol_Open(); // SELECT opens the peepo QOL menu (registered-item use lives inside it)
         return TRUE;
+    }
 
     if (input->pressedRButton && TryStartDexNavSearch())
         return TRUE;
@@ -399,12 +406,32 @@ static const u8 *GetInteractedObjectEventScript(struct MapPosition *position, u8
     gSpecialVar_LastTalked = gObjectEvents[objectEventId].localId;
     gSpecialVar_Facing = direction;
 
-    if (InTrainerHill() == TRUE)
-        script = GetTrainerHillTrainerScript();
-    else if (PlayerHasFollowerNPC() && objectEventId == GetFollowerNPCObjectId())
-        script = GetFollowerNPCScriptPointer();
-    else
-        script = GetObjectEventScriptPointerByObjectEventId(objectEventId);
+    // Peepo map editor: pressing A on a placed cuttable tree / breakable rock / boulder
+    // cuts/smashes/pushes it — but only if you can use the matching HM (badge + a party
+    // mon that knows it), mirroring how real obstacles gate on A-press. If it acted,
+    // there's no dialog — return no script.
+    if (PeepoMapEdit_TryAPressFieldMove(gObjectEvents[objectEventId].localId))
+        return NULL;
+
+    // Peepo multiplayer: remote players' avatars are spawned dynamically and have
+    // NO map template, so GetObjectEventScriptPointerByObjectEventId would deref a
+    // NULL template (->script) and crash. Resolve them FIRST and skip that lookup;
+    // this also buffers their name and returns the in-game greeting script.
+    script = PeepoOverworld_GetRemoteInteractScript(gObjectEvents[objectEventId].localId);
+    // Every dynamically-spawned Peepo object (remote avatars, editor-placed objects,
+    // the editor cursor: localIds 0xE0-0xF7) has NO map template, so the template
+    // lookup below would deref a NULL template->script and crash. Remotes are handled
+    // by the call above; the rest (placed objects/cursor) simply have no interaction
+    // — leave `script` NULL so talking to them is a safe no-op.
+    if (script == NULL && !PeepoNet_IsNetworkedLocalId(gObjectEvents[objectEventId].localId))
+    {
+        if (InTrainerHill() == TRUE)
+            script = GetTrainerHillTrainerScript();
+        else if (PlayerHasFollowerNPC() && objectEventId == GetFollowerNPCObjectId())
+            script = GetFollowerNPCScriptPointer();
+        else
+            script = GetObjectEventScriptPointerByObjectEventId(objectEventId);
+    }
 
     script = GetRamScript(gSpecialVar_LastTalked, script);
     return script;
@@ -563,7 +590,9 @@ static const u8 *GetInteractedMetatileScript(struct MapPosition *position, u8 me
 
 static const u8 *GetInteractedWaterScript(struct MapPosition *unused1, u8 metatileBehavior, u8 direction)
 {
-    if (IsFieldMoveUnlocked(FIELD_MOVE_SURF) && PartyHasMonWithSurf() == TRUE && IsPlayerFacingSurfableFishableWater() == TRUE
+    // Peepo: no HM slave — Surf only needs the badge (IsFieldMoveUnlocked), not a party mon
+    // that knows Surf. EventScript_UseSurf's checkfieldmove falls back to the first party mon.
+    if (IsFieldMoveUnlocked(FIELD_MOVE_SURF) && IsPlayerFacingSurfableFishableWater() == TRUE
      && CheckFollowerNPCFlag(FOLLOWER_NPC_FLAG_CAN_SURF)
      )
         return EventScript_UseSurf;

@@ -1,6 +1,7 @@
 #include "global.h"
 #include "battle.h"
 #include "battle_gfx_sfx_util.h"
+#include "peepo_rando.h"
 #include "berry.h"
 #include "data.h"
 #include "daycare.h"
@@ -341,6 +342,10 @@ static u32 ScriptGiveMonParameterized(u8 side, u8 slot, u16 species, u8 level, u
     u8 genderRatio = gSpeciesInfo[species].genderRatio;
     u16 targetSpecies;
     bool32 isShiny;
+
+    // Randomize script-given mons (starters, gift Pokémon) like wild/trainer mons.
+    species = PeepoRando_MapSpecies(species, RANDO_KIND_GIFT);
+    genderRatio = gSpeciesInfo[species].genderRatio;
 
     // check whether to use a specific nature or a random one
     if (nature >= NUM_NATURES)

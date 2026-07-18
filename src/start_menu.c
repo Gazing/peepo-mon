@@ -45,6 +45,9 @@
 #include "window.h"
 #include "union_room.h"
 #include "dexnav.h"
+#include "region_map.h"
+#include "field_move.h"
+#include "constants/field_move.h"
 #include "wild_encounter.h"
 #include "constants/battle_frontier.h"
 #include "constants/rgb.h"
@@ -68,6 +71,7 @@ enum
     MENU_ACTION_PYRAMID_BAG,
     MENU_ACTION_DEBUG,
     MENU_ACTION_DEXNAV,
+    MENU_ACTION_FLY,
 };
 
 // Save status
@@ -110,6 +114,7 @@ static bool8 StartMenuBattlePyramidRetireCallback(void);
 static bool8 StartMenuBattlePyramidBagCallback(void);
 static bool8 StartMenuDebugCallback(void);
 static bool8 StartMenuDexNavCallback(void);
+static bool8 StartMenuFlyCallback(void);
 
 // Menu callbacks
 static bool8 SaveStartCallback(void);
@@ -188,6 +193,7 @@ static const struct WindowTemplate sWindowTemplate_PyramidPeak = {
 
 static const u8 sText_MenuDebug[] = _("DEBUG");
 
+static const u8 sText_MenuFly[] = _("FLY");
 static const struct MenuAction sStartMenuItems[] =
 {
     [MENU_ACTION_POKEDEX]         = {gText_MenuPokedex, {.u8_void = StartMenuPokedexCallback}},
@@ -205,6 +211,7 @@ static const struct MenuAction sStartMenuItems[] =
     [MENU_ACTION_PYRAMID_BAG]     = {gText_MenuBag,     {.u8_void = StartMenuBattlePyramidBagCallback}},
     [MENU_ACTION_DEBUG]           = {sText_MenuDebug,   {.u8_void = StartMenuDebugCallback}},
     [MENU_ACTION_DEXNAV]          = {gText_MenuDexNav,  {.u8_void = StartMenuDexNavCallback}},
+    [MENU_ACTION_FLY]             = {sText_MenuFly,     {.u8_void = StartMenuFlyCallback}},
 };
 
 static const struct BgTemplate sBgTemplates_LinkBattleSave[] =
@@ -335,6 +342,8 @@ static void BuildNormalStartMenu(void)
 
     if (DN_FLAG_DEXNAV_GET != 0 && FlagGet(DN_FLAG_DEXNAV_GET))
         AddStartMenuAction(MENU_ACTION_DEXNAV);
+    if (IsFieldMoveUnlocked(FIELD_MOVE_FLY)) // Fly, slave-free, once the Feather Badge is earned
+        AddStartMenuAction(MENU_ACTION_FLY);
 
     if (FlagGet(FLAG_SYS_POKEMON_GET) == TRUE)
         AddStartMenuAction(MENU_ACTION_POKEMON);
@@ -1496,6 +1505,23 @@ static bool8 StartMenuDexNavCallback(void)
 {
     CreateTask(Task_OpenDexNavFromStartMenu, 0);
     return TRUE;
+}
+
+// Fly, slave-free, straight from the Start menu (moved out of the QOL menu). Opens the
+// region-map fly selector; PeepoFly_SetReturnToField makes a cancel go back to the field
+// instead of the (never-opened) party menu.
+static bool8 StartMenuFlyCallback(void)
+{
+    if (!gPaletteFade.active)
+    {
+        PlayRainStoppingSoundEffect();
+        RemoveExtraStartMenuWindows();
+        CleanupOverworldWindowsAndTilemaps();
+        PeepoFly_SetReturnToField();
+        SetMainCallback2(CB2_OpenFlyMap);
+        return TRUE;
+    }
+    return FALSE;
 }
 
 void Script_ForceSaveGame(struct ScriptContext *ctx)

@@ -1,5 +1,6 @@
 #include "global.h"
 #include "overworld.h"
+#include "peepo_hardcore.h"
 #include "battle_pyramid.h"
 #include "battle_setup.h"
 #include "berry.h"
@@ -377,6 +378,11 @@ static void (*const sMovementStatusHandler[])(struct LinkPlayerObjectEvent *, st
 // code
 void DoWhiteOut(void)
 {
+    if (PeepoHardcore_IsEnabled())
+    {
+        PeepoHardcore_OnWhiteOut(); // wipes the save + resets to title (never returns)
+        return;
+    }
     RunScriptImmediately(EventScript_WhiteOut);
     HealPlayerParty();
     Overworld_ResetStateAfterWhiteOut();

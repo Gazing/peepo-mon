@@ -1,6 +1,9 @@
 #include "global.h"
 #include "crt0.h"
 #include "malloc.h"
+#include "peepo_overworld.h"
+#include "peepo_mapedit.h"
+#include "peepo_hardcore.h"
 #include "link.h"
 #include "link_rfu.h"
 #include "librfu.h"
@@ -169,6 +172,9 @@ void AgbMainLoop(void)
 
         PlayTimeCounter_Update();
         MapMusicMain();
+        PeepoOverworld_Update(); // PEEPO NET: multiplayer overworld sync per frame
+        PeepoMapEdit_Update();   // PEEPO NET: apply the global shared world map on map entry
+        PeepoHardcore_Tick();    // PEEPO: hardcore-mode fainted-mon release on battle exit
         WaitForVBlank();
     }
 }

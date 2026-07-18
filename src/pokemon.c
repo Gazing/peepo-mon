@@ -1,5 +1,6 @@
 #include "global.h"
 #include "malloc.h"
+#include "peepo_rando.h"
 #include "apprentice.h"
 #include "battle.h"
 #include "battle_ai_switch_items.h"
@@ -3435,6 +3436,11 @@ enum Ability GetAbilityBySpecies(u16 species, u8 abilityNum)
         gLastUsedAbility = GetSpeciesAbility(species, i);
     }
 
+    // Ability randomizer: override with a curated random ability (deterministic
+    // per species + slot). Applied here so battle / summary / AI stay consistent.
+    if (gSaveBlock2Ptr->peepoRandoFlags & RANDO_F_ABILITY)
+        gLastUsedAbility = PeepoRando_RandomAbility(species, abilityNum);
+
     return gLastUsedAbility;
 }
 
@@ -4884,6 +4890,14 @@ u32 GetEvolutionTargetSpecies(struct Pokemon *mon, enum EvolutionMode mode, u16 
             {
             case EVO_ITEM:
                 if (evolutions[i].param == evolutionItem)
+                    conditionsMet = TRUE;
+                break;
+            case EVO_TRADE:
+                // The Linking Cord acts as a "link cable": using it triggers trade
+                // evolutions without an actual trade (there's no link trading here).
+                // Held-item trade evos (e.g. Onix + Metal Coat -> Steelix) still need
+                // the item, which is verified below by the evolution's own conditions.
+                if (evolutionItem == ITEM_LINKING_CORD)
                     conditionsMet = TRUE;
                 break;
             }

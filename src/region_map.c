@@ -79,6 +79,11 @@ static EWRAM_DATA struct {
     bool8 choseFlyLocation;
 } *sFlyMap = NULL;
 
+// peepo: set by the QOL-menu "Fly" launcher so a CANCELLED fly returns to the FIELD
+// instead of the (never-opened) party menu that the vanilla path assumes.
+static bool8 sPeepoFlyReturnToField = FALSE;
+void PeepoFly_SetReturnToField(void) { sPeepoFlyReturnToField = TRUE; }
+
 static bool32 sDrawFlyDestTextWindow;
 
 static u8 ProcessRegionMapInput_Full(void);
@@ -2002,8 +2007,15 @@ static void CB_ExitFlyMap(void)
             {
                 struct RegionMap* tempRegionMap = &sFlyMap->regionMap;
 
+                sPeepoFlyReturnToField = FALSE;
                 SetFlyDestination(tempRegionMap);
                 ReturnToFieldFromFlyMapSelect();
+            }
+            else if (sPeepoFlyReturnToField)
+            {
+                // peepo: opened from the QOL menu (no party menu) — cancel back to the field.
+                sPeepoFlyReturnToField = FALSE;
+                SetMainCallback2(CB2_ReturnToField);
             }
             else
             {

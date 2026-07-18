@@ -2313,6 +2313,15 @@ bool8 ScrCmd_checkfieldmove(struct ScriptContext *ctx)
         }
     }
 
+    // Peepo: no HM slave — if the field move is UNLOCKED (its badge earned) but no party
+    // mon actually knows it, fall back to the first party mon, which performs the field-move
+    // animation. The badge stays the gate; you just don't have to lug a move-knower around.
+    if (gSpecialVar_Result == PARTY_SIZE && IsFieldMoveUnlocked(fieldMove))
+    {
+        gSpecialVar_Result = 0;
+        gSpecialVar_0x8004 = GetMonData(&gPlayerParty[0], MON_DATA_SPECIES, NULL);
+    }
+
     return FALSE;
 }
 

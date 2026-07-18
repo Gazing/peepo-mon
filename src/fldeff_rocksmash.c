@@ -5,6 +5,7 @@
 #include "event_scripts.h"
 #include "field_effect.h"
 #include "field_player_avatar.h"
+#include "peepo_mapedit.h"
 #include "fldeff.h"
 #include "item_use.h"
 #include "overworld.h"
@@ -128,6 +129,14 @@ bool32 SetUpFieldMove_RockSmash(void)
         gSpecialVar_Result = GetCursorSelectionMonId();
         gFieldCallback2 = FieldCallback_PrepareFadeInFromMenu;
         gPostMenuFieldCallback = SetUpPuzzleEffectRegirock;
+        return TRUE;
+    }
+    // Peepo: an editor-placed rock is deleted (networked); the vanilla scripted-rock
+    // path below expects a real map object.
+    else if (PeepoMapEdit_PlacedFieldMoveTarget(OBJ_EVENT_GFX_BREAKABLE_ROCK))
+    {
+        gFieldCallback2 = FieldCallback_PrepareFadeInFromMenu;
+        gPostMenuFieldCallback = PeepoMapEdit_DoFieldMovePlaced;
         return TRUE;
     }
     else if (CheckObjectGraphicsInFrontOfPlayer(OBJ_EVENT_GFX_BREAKABLE_ROCK) == TRUE)

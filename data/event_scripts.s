@@ -1162,3 +1162,51 @@ EventScript_VsSeekerChargingDone::
 	.include "data/scripts/dexnav.inc"
 	.include "data/scripts/battle_frontier.inc"
 	.include "data/scripts/apricorn_tree.inc"
+
+@ ---------------------------------------------------------------------------
+@ Peepo multiplayer: greeting shown when you press A facing a remote player.
+@ The player's name is buffered into gStringVar1 (converted to the game charset
+@ by the JS transport) before this script is set up. See src/peepo_overworld.c.
+PeepoInteractScript::
+	lockall
+	msgbox PeepoInteractText, MSGBOX_DEFAULT
+	releaseall
+	end
+
+PeepoInteractText:
+	.string "{STR_VAR_1}: Hi there!$"
+
+@ Shown when you press A facing another player's networked follower Pokémon. The
+@ owning player's name is buffered into gStringVar1 (see src/peepo_overworld.c).
+PeepoFollowerScript::
+	lockall
+	msgbox PeepoFollowerText, MSGBOX_DEFAULT
+	releaseall
+	end
+
+PeepoFollowerText:
+	.string "{STR_VAR_1}'s POKéMON!$"
+
+@ QOL "Poke Vial": full-heal the party (like a Poke Center) + confirmation dialog. Run
+@ from the SELECT/QOL menu (see src/peepo_qol.c).
+PeepoHealScript::
+	lockall
+	special HealPlayerParty
+	playfanfare MUS_HEAL
+	msgbox PeepoHealText, MSGBOX_DEFAULT
+	releaseall
+	end
+
+PeepoHealText:
+	.string "Your POKéMON were healed to\n"
+	.string "full health!$"
+
+@ Hardcore (enforced nuzlocke): shown on a whiteout right before the save is
+@ erased and the game resets to the title screen. See src/peepo_hardcore.c.
+EventScript_PeepoHardcoreGameOver::
+	msgbox PeepoHardcoreGameOverText, MSGBOX_DEFAULT
+	end
+
+PeepoHardcoreGameOverText:
+	.string "Your hardcore run is over!\p"
+	.string "This save will now be erased…$"

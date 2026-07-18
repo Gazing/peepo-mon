@@ -38,6 +38,7 @@
 #include "title_screen.h"
 #include "window.h"
 #include "mystery_gift_menu.h"
+#include "peepo_rando.h"
 
 /*
  * Main menu state machine
@@ -244,6 +245,10 @@ static void MainMenu_FormatSavegamePokedex(void);
 static void MainMenu_FormatSavegameTime(void);
 static void MainMenu_FormatSavegameBadges(void);
 static void NewGameBirchSpeech_CreateDialogueWindowBorder(u8, u8, u8, u8, u8, u8);
+static void Task_PeepoRando_Begin(u8);
+static void Task_PeepoRando_MenuInput(u8);
+static void Task_PeepoHardcore_Begin(u8);
+static void Task_PeepoHardcore_MenuInput(u8);
 
 // .rodata
 
@@ -419,6 +424,17 @@ static const struct WindowTemplate sNewGameBirchSpeechTextWindows[] =
         .height = 10,
         .paletteNum = 15,
         .baseBlock = 0x85
+    },
+    {   // [3] peepo randomizer setup menu. baseBlock 0x107 is in the clean tile
+        // zone above the dialogue-box frame tiles (box stays intact) and below
+        // the birch background tiles.
+        .bg = 0,
+        .tilemapLeft = 3,
+        .tilemapTop = 2,
+        .width = 11,
+        .height = 11, // title + gap + 4 option rows (randomizer); reused by the 2-option Hardcore screen
+        .paletteNum = 15,
+        .baseBlock = 0x107
     },
     DUMMY_WIN_TEMPLATE
 };
@@ -1357,7 +1373,9 @@ static void Task_NewGameBirchSpeech_WaitForSpriteFadeInWelcome(u8 taskId)
             NewGameBirchSpeech_ClearWindow(0);
             StringExpandPlaceholders(gStringVar4, gText_Birch_Welcome);
             AddTextPrinterForMessage(TRUE);
-            gTasks[taskId].func = Task_NewGameBirchSpeech_ThisIsAPokemon;
+            // Peepo: skip the "This is a POKéMON" Lotad-demo box so the intro is
+            // just the two custom sentences (Welcome -> MainSpeech -> gender).
+            gTasks[taskId].func = Task_NewGameBirchSpeech_MainSpeech;
         }
     }
 }
@@ -1529,13 +1547,13 @@ static void Task_NewGameBirchSpeech_ChooseGender(u8 taskId)
             PlaySE(SE_SELECT);
             gSaveBlock2Ptr->playerGender = gender;
             NewGameBirchSpeech_ClearGenderWindow(1, 1);
-            gTasks[taskId].func = Task_NewGameBirchSpeech_WhatsYourName;
+            gTasks[taskId].func = Task_PeepoRando_Begin;
             break;
         case FEMALE:
             PlaySE(SE_SELECT);
             gSaveBlock2Ptr->playerGender = gender;
             NewGameBirchSpeech_ClearGenderWindow(1, 1);
-            gTasks[taskId].func = Task_NewGameBirchSpeech_WhatsYourName;
+            gTasks[taskId].func = Task_PeepoRando_Begin;
             break;
     }
     gender2 = Menu_GetCursorPos();
@@ -1589,6 +1607,309 @@ static void Task_NewGameBirchSpeech_SlideInNewGenderSprite(u8 taskId)
             gTasks[taskId].func = Task_NewGameBirchSpeech_ChooseGender;
         }
     }
+}
+
+// ---- Peepo randomizer: new-game setup menu ----
+// Native-style list menu shown between gender selection and name entry. The main
+// list (Species / Abilities / Start) drills into a sub-menu of choices; the
+// currently-active choice is shown in green. Choices commit to
+// gSaveBlock2Ptr->peepoRandoFlags (SaveBlock2 survives the new-game wipe). Uses
+// window index 3 (clean tile zone above the dialogue-box frame). The dialogue box
+// is hidden while the menu is up and restored before name entry.
+#define PEEPO_RANDO_WIN       3
+#define PEEPO_RANDO_LIST_TOP  22  // pixel y of the first list row (title sits above, with a small gap)
+#define PEEPO_RANDO_WIN_PX    88  // window content width in pixels (for title centering)
+enum { RANDO_MODE_MAIN, RANDO_MODE_SPECIES, RANDO_MODE_TRAINER, RANDO_MODE_ABILITY };
+
+static EWRAM_DATA u8 sRandoMode = 0;         // RANDO_MODE_*
+static EWRAM_DATA u8 sRandoCursor = 0;       // cursor within the current list
+static EWRAM_DATA u8 sRandoSpeciesMode = 0;  // 0 Off, 1 Normal, 2 Scaled, 3 Legendary-aware
+static EWRAM_DATA u8 sRandoTrainer = 0;      // 0 Off, 1 All, 2 No Bosses
+static EWRAM_DATA u8 sRandoAbility = 0;      // 0 Off, 1 On
+static EWRAM_DATA u8 sRandoHardcore = 0;     // 0 Off, 1 On (enforced nuzlocke)
+
+static const u8 sText_Rando_Title[]    = _("RANDOMIZER");
+static const u8 sText_Rando_Species[]  = _("Species");
+static const u8 sText_Rando_Trainers[] = _("Trainers");
+static const u8 sText_Rando_Ability[]  = _("Abilities");
+static const u8 sText_Rando_Start[]    = _("Start!");
+static const u8 sText_HardcoreTitle[]  = _("HARDCORE"); // title of the separate hardcore screen
+static const u8 sText_Rando_Off[]      = _("Off");
+static const u8 sText_Rando_Normal[]   = _("Normal");
+static const u8 sText_Rando_Scaled[]   = _("Scaled");
+static const u8 sText_Rando_Legends[]  = _("Legends");
+static const u8 sText_Rando_On[]       = _("On");
+static const u8 sText_Rando_All[]      = _("All");
+static const u8 sText_Rando_NoBoss[]   = _("No Bosses");
+
+// Tooltips shown in the dialogue box for the highlighted item.
+static const u8 sTip_Species[]   = _("Shuffle the wild species\nyou'll find.");
+static const u8 sTip_Trainers[]  = _("Shuffle the teams Trainers\nbattle you with.");
+static const u8 sTip_Abilities[] = _("Give everyone random\nAbilities.");
+static const u8 sTip_Start[]     = _("Begin your adventure with\nthese settings!");
+static const u8 sTip_SpOff[]     = _("Wild species stay as they\nare.");
+static const u8 sTip_SpNormal[]  = _("Wild species become fully\nrandom.");
+static const u8 sTip_SpScaled[]  = _("Swapped for species of\nsimilar strength.");
+static const u8 sTip_SpLegends[] = _("Random, but Legendaries\nstay Legendary.");
+static const u8 sTip_TrOff[]     = _("Trainers keep their\noriginal teams.");
+static const u8 sTip_TrAll[]     = _("Randomize all Trainers,\neven Gym Leaders.");
+static const u8 sTip_TrNoBoss[]  = _("Randomize Trainers, but not\nGym Leaders or bosses.");
+static const u8 sTip_AbOff[]     = _("Abilities stay as they are.");
+static const u8 sTip_AbOn[]      = _("Give random Abilities from\na curated pool.");
+static const u8 sTip_HcOff[]     = _("Play normally, no Nuzlocke\nrules.");
+static const u8 sTip_HcOn[]      = _("Faints release the mon; a\nwipe deletes your save!");
+
+static const struct MenuAction sRandoMainActions[] = {
+    { sText_Rando_Species,  {NULL} },
+    { sText_Rando_Trainers, {NULL} },
+    { sText_Rando_Ability,  {NULL} },
+    { sText_Rando_Start,    {NULL} },
+};
+// Hardcore-mode setup — its own screen shown right after the randomizer's Start!.
+static const struct MenuAction sHardcoreActions[] = {
+    { sText_Rando_Off, {NULL} },
+    { sText_Rando_On,  {NULL} },
+};
+static const struct MenuAction sRandoSpeciesActions[] = {
+    { sText_Rando_Off,     {NULL} },
+    { sText_Rando_Normal,  {NULL} },
+    { sText_Rando_Scaled,  {NULL} },
+    { sText_Rando_Legends, {NULL} },
+};
+static const struct MenuAction sRandoTrainerActions[] = {
+    { sText_Rando_Off,    {NULL} },
+    { sText_Rando_All,    {NULL} },
+    { sText_Rando_NoBoss, {NULL} },
+};
+static const struct MenuAction sRandoAbilityActions[] = {
+    { sText_Rando_Off, {NULL} },
+    { sText_Rando_On,  {NULL} },
+};
+
+// White bg / green fg / light-green shadow — marks the currently-active choice.
+static const u8 sRandoGreenText[] = { TEXT_COLOR_WHITE, TEXT_COLOR_GREEN, TEXT_COLOR_LIGHT_GREEN };
+
+static const struct MenuAction *PeepoRando_CurrentList(u8 *countOut, u8 *activeOut)
+{
+    switch (sRandoMode)
+    {
+    case RANDO_MODE_SPECIES: *countOut = 4; *activeOut = sRandoSpeciesMode; return sRandoSpeciesActions;
+    case RANDO_MODE_TRAINER: *countOut = 3; *activeOut = sRandoTrainer;     return sRandoTrainerActions;
+    case RANDO_MODE_ABILITY: *countOut = 2; *activeOut = sRandoAbility;     return sRandoAbilityActions;
+    default:                 *countOut = 4; *activeOut = 0xFF;             return sRandoMainActions;
+    }
+}
+
+static const u8 *PeepoRando_Title(void)
+{
+    switch (sRandoMode)
+    {
+    case RANDO_MODE_SPECIES: return sText_Rando_Species;
+    case RANDO_MODE_TRAINER: return sText_Rando_Trainers;
+    case RANDO_MODE_ABILITY: return sText_Rando_Ability;
+    default:                 return sText_Rando_Title;
+    }
+}
+
+static const u8 *PeepoRando_Tooltip(void)
+{
+    switch (sRandoMode)
+    {
+    case RANDO_MODE_SPECIES:
+        switch (sRandoCursor) { case 0: return sTip_SpOff; case 1: return sTip_SpNormal; case 2: return sTip_SpScaled; default: return sTip_SpLegends; }
+    case RANDO_MODE_TRAINER:
+        switch (sRandoCursor) { case 0: return sTip_TrOff; case 1: return sTip_TrAll; default: return sTip_TrNoBoss; }
+    case RANDO_MODE_ABILITY:
+        return sRandoCursor ? sTip_AbOn : sTip_AbOff;
+    default: // MAIN
+        switch (sRandoCursor) { case 0: return sTip_Species; case 1: return sTip_Trainers; case 2: return sTip_Abilities; default: return sTip_Start; }
+    }
+}
+
+static void PeepoRando_ShowTooltip(void)
+{
+    NewGameBirchSpeech_ClearWindow(0);
+    AddTextPrinterParameterized(0, FONT_NORMAL, PeepoRando_Tooltip(), 0, 1, TEXT_SKIP_DRAW, NULL);
+    CopyWindowToVram(0, COPYWIN_GFX);
+}
+
+static void PeepoRando_DrawMenu(void)
+{
+    u8 count, active;
+    const u8 *title = PeepoRando_Title();
+    const struct MenuAction *list = PeepoRando_CurrentList(&count, &active);
+
+    DrawMainMenuWindowBorder(&sNewGameBirchSpeechTextWindows[PEEPO_RANDO_WIN], 0xF3);
+    FillWindowPixelBuffer(PEEPO_RANDO_WIN, PIXEL_FILL(1));
+    AddTextPrinterParameterized(PEEPO_RANDO_WIN, FONT_NORMAL, title, 8, 1, TEXT_SKIP_DRAW, NULL); // left-aligned, matching the option list
+    PrintMenuActionTextsAtPos(PEEPO_RANDO_WIN, FONT_NORMAL, 8, PEEPO_RANDO_LIST_TOP, 16, count, list);
+    if (active != 0xFF) // reprint the active sub-menu choice in green
+        AddTextPrinterParameterized3(PEEPO_RANDO_WIN, FONT_NORMAL, 8, (active * 16) + PEEPO_RANDO_LIST_TOP, sRandoGreenText, TEXT_SKIP_DRAW, list[active].text);
+    InitMenuNormal(PEEPO_RANDO_WIN, FONT_NORMAL, 0, PEEPO_RANDO_LIST_TOP, 16, count, sRandoCursor);
+    PutWindowTilemap(PEEPO_RANDO_WIN);
+    CopyWindowToVram(PEEPO_RANDO_WIN, COPYWIN_FULL);
+}
+
+static void PeepoRando_Refresh(void) // redraw menu window + update the tooltip
+{
+    PeepoRando_DrawMenu();
+    PeepoRando_ShowTooltip();
+}
+
+static void PeepoRando_Commit(void)
+{
+    u8 flags = 0;
+
+    switch (sRandoSpeciesMode)
+    {
+    case 1: flags |= RANDO_F_WILD; break;                           // Normal
+    case 2: flags |= RANDO_F_WILD | RANDO_F_SCALED; break;          // Scaled
+    case 3: flags |= RANDO_F_WILD | RANDO_F_LEGENDARY_AWARE; break; // Legendary-aware
+    }
+    switch (sRandoTrainer)
+    {
+    case 1: flags |= RANDO_F_TRAINER | RANDO_F_TRAINER_BOSSES; break; // All Trainers
+    case 2: flags |= RANDO_F_TRAINER; break;                          // No Bosses
+    }
+    if (sRandoAbility)
+        flags |= RANDO_F_ABILITY;
+
+    gSaveBlock2Ptr->peepoRandoFlags = flags; // hardcore bit is set later, on its own screen
+}
+
+static void Task_PeepoRando_MenuInput(u8 taskId)
+{
+    s8 sel = Menu_ProcessInputNoWrap(); // native cursor handles up/down
+    u8 cur = Menu_GetCursorPos();
+
+    if (cur != sRandoCursor) // cursor moved within the list -> update the tooltip
+    {
+        sRandoCursor = cur;
+        PeepoRando_ShowTooltip();
+    }
+
+    if (sel == MENU_NOTHING_CHOSEN)
+        return;
+
+    if (sel == MENU_B_PRESSED)
+    {
+        if (sRandoMode != RANDO_MODE_MAIN) // back out of a sub-menu
+        {
+            PlaySE(SE_SELECT);
+            sRandoCursor = (sRandoMode == RANDO_MODE_SPECIES) ? 0 : (sRandoMode == RANDO_MODE_TRAINER) ? 1 : 2;
+            sRandoMode = RANDO_MODE_MAIN;
+            PeepoRando_Refresh();
+        }
+        return;
+    }
+
+    PlaySE(SE_SELECT);
+    if (sRandoMode == RANDO_MODE_MAIN)
+    {
+        switch (sel)
+        {
+        case 0: sRandoMode = RANDO_MODE_SPECIES; sRandoCursor = sRandoSpeciesMode; break;
+        case 1: sRandoMode = RANDO_MODE_TRAINER; sRandoCursor = sRandoTrainer;     break;
+        case 2: sRandoMode = RANDO_MODE_ABILITY; sRandoCursor = sRandoAbility;     break;
+        default: // Start! -> commit randomizer, then the separate Hardcore screen
+            PeepoRando_Commit();
+            gTasks[taskId].func = Task_PeepoHardcore_Begin;
+            return;
+        }
+        PeepoRando_Refresh();
+    }
+    else if (sRandoMode == RANDO_MODE_SPECIES)
+    {
+        sRandoSpeciesMode = sel;
+        sRandoCursor = 0; // back to main, on Species
+        sRandoMode = RANDO_MODE_MAIN;
+        PeepoRando_Refresh();
+    }
+    else if (sRandoMode == RANDO_MODE_TRAINER)
+    {
+        sRandoTrainer = sel;
+        sRandoCursor = 1; // back to main, on Trainers
+        sRandoMode = RANDO_MODE_MAIN;
+        PeepoRando_Refresh();
+    }
+    else // RANDO_MODE_ABILITY
+    {
+        sRandoAbility = sel;
+        sRandoCursor = 2; // back to main, on Abilities
+        sRandoMode = RANDO_MODE_MAIN;
+        PeepoRando_Refresh();
+    }
+}
+
+static void Task_PeepoRando_Begin(u8 taskId)
+{
+    sRandoMode = RANDO_MODE_MAIN;
+    sRandoCursor = 0;
+    sRandoSpeciesMode = 0;
+    sRandoTrainer = 0;
+    sRandoAbility = 0;
+    sRandoHardcore = 0;
+    gSaveBlock2Ptr->peepoRandoFlags = 0;
+    // Show the menu and the first tooltip in the (kept-visible) dialogue box.
+    PeepoRando_Refresh();
+    gTasks[taskId].func = Task_PeepoRando_MenuInput;
+}
+
+// ---- Hardcore (enforced nuzlocke) setup: its own screen after the randomizer ----
+// Reuses the randomizer window (PEEPO_RANDO_WIN), which is still open from Start!.
+static void PeepoHardcore_ShowTooltip(void)
+{
+    NewGameBirchSpeech_ClearWindow(0);
+    AddTextPrinterParameterized(0, FONT_NORMAL, sRandoHardcore ? sTip_HcOn : sTip_HcOff, 0, 1, TEXT_SKIP_DRAW, NULL);
+    CopyWindowToVram(0, COPYWIN_GFX);
+}
+
+static void PeepoHardcore_DrawMenu(void)
+{
+    DrawMainMenuWindowBorder(&sNewGameBirchSpeechTextWindows[PEEPO_RANDO_WIN], 0xF3);
+    FillWindowPixelBuffer(PEEPO_RANDO_WIN, PIXEL_FILL(1));
+    AddTextPrinterParameterized(PEEPO_RANDO_WIN, FONT_NORMAL, sText_HardcoreTitle, 8, 1, TEXT_SKIP_DRAW, NULL);
+    PrintMenuActionTextsAtPos(PEEPO_RANDO_WIN, FONT_NORMAL, 8, PEEPO_RANDO_LIST_TOP, 16, 2, sHardcoreActions);
+    InitMenuNormal(PEEPO_RANDO_WIN, FONT_NORMAL, 0, PEEPO_RANDO_LIST_TOP, 16, 2, sRandoHardcore);
+    PutWindowTilemap(PEEPO_RANDO_WIN);
+    CopyWindowToVram(PEEPO_RANDO_WIN, COPYWIN_FULL);
+}
+
+static void PeepoHardcore_Refresh(void)
+{
+    PeepoHardcore_DrawMenu();
+    PeepoHardcore_ShowTooltip();
+}
+
+static void Task_PeepoHardcore_MenuInput(u8 taskId)
+{
+    s8 sel = Menu_ProcessInputNoWrap();
+    u8 cur = Menu_GetCursorPos();
+
+    if (cur != sRandoHardcore) // cursor moved -> update the tooltip
+    {
+        sRandoHardcore = cur;
+        PeepoHardcore_ShowTooltip();
+    }
+
+    if (sel == MENU_NOTHING_CHOSEN || sel == MENU_B_PRESSED)
+        return; // must pick Off or On to continue
+
+    PlaySE(SE_SELECT);
+    if (sel) // On
+        gSaveBlock2Ptr->peepoRandoFlags |= RANDO_F_HARDCORE;
+    else
+        gSaveBlock2Ptr->peepoRandoFlags &= ~RANDO_F_HARDCORE;
+    NewGameBirchSpeech_ClearGenderWindow(PEEPO_RANDO_WIN, 1); // hide the menu window
+    CopyBgTilemapBufferToVram(0);
+    gTasks[taskId].func = Task_NewGameBirchSpeech_WhatsYourName;
+}
+
+static void Task_PeepoHardcore_Begin(u8 taskId)
+{
+    sRandoHardcore = 0; // default Off
+    PeepoHardcore_Refresh();
+    gTasks[taskId].func = Task_PeepoHardcore_MenuInput;
 }
 
 static void Task_NewGameBirchSpeech_WhatsYourName(u8 taskId)

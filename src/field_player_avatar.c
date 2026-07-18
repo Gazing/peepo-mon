@@ -1,4 +1,5 @@
 #include "global.h"
+#include "peepo_qol.h"
 #include "main.h"
 #include "bike.h"
 #include "event_data.h"
@@ -841,8 +842,8 @@ static void PlayerNotOnBikeMoving(u8 direction, u16 heldKeys)
     }
 
     if (!(gPlayerAvatar.flags & PLAYER_AVATAR_FLAG_UNDERWATER)
-     && (heldKeys & B_BUTTON) 
-     && FlagGet(FLAG_SYS_B_DASH)
+     && PeepoQol_WantsRun(heldKeys) // auto-run toggle inverts the hold-B-to-run rule
+     && (FlagGet(FLAG_SYS_B_DASH) || FlagGet(FLAG_PEEPO_AUTORUN)) // auto-run also grants running before the running shoes
      && IsRunningDisallowed(gObjectEvents[gPlayerAvatar.objectEventId].currentMetatileBehavior) == 0 
      && !FollowerNPCComingThroughDoor() 
      && (I_ORAS_DOWSING_FLAG == 0 || (I_ORAS_DOWSING_FLAG != 0 && !FlagGet(I_ORAS_DOWSING_FLAG))))

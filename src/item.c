@@ -807,6 +807,27 @@ const u8 *GetItemName(u16 itemId)
 
 u32 GetItemPrice(u16 itemId)
 {
+    switch (itemId)
+    {
+    // Evolution items — sold as a set at the Rustboro Mart (first gym) for a flat 5000.
+    case ITEM_FIRE_STONE:  case ITEM_WATER_STONE:  case ITEM_THUNDER_STONE:
+    case ITEM_LEAF_STONE:  case ITEM_ICE_STONE:    case ITEM_SUN_STONE:
+    case ITEM_MOON_STONE:  case ITEM_SHINY_STONE:  case ITEM_DUSK_STONE:
+    case ITEM_DAWN_STONE:  case ITEM_LINKING_CORD: case ITEM_METAL_COAT:
+    case ITEM_KINGS_ROCK:  case ITEM_DRAGON_SCALE: case ITEM_UPGRADE:
+    case ITEM_DUBIOUS_DISC: case ITEM_PROTECTOR:   case ITEM_ELECTIRIZER:
+    case ITEM_MAGMARIZER:  case ITEM_REAPER_CLOTH: case ITEM_PRISM_SCALE:
+    case ITEM_RAZOR_CLAW:  case ITEM_RAZOR_FANG:   case ITEM_OVAL_STONE:
+    case ITEM_SACHET:      case ITEM_WHIPPED_DREAM: case ITEM_DEEP_SEA_TOOTH:
+    case ITEM_DEEP_SEA_SCALE: case ITEM_BLACK_AUGURITE: case ITEM_PEAT_BLOCK:
+    case ITEM_SWEET_APPLE: case ITEM_TART_APPLE:   case ITEM_SYRUPY_APPLE:
+    case ITEM_CRACKED_POT: case ITEM_CHIPPED_POT:  case ITEM_GALARICA_CUFF:
+    case ITEM_GALARICA_WREATH: case ITEM_MASTERPIECE_TEACUP:
+    case ITEM_UNREMARKABLE_TEACUP: case ITEM_AUSPICIOUS_ARMOR:
+    case ITEM_MALICIOUS_ARMOR: case ITEM_LEADERS_CREST: case ITEM_METAL_ALLOY:
+    case ITEM_STRAWBERRY_SWEET:
+        return 5000;
+    }
     return gItemsInfo[SanitizeItemId(itemId)].price;
 }
 
