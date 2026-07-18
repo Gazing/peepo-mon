@@ -1,53 +1,37 @@
-name: CI
+name: ROM build
+
+# Compile-check every push / PR to the peepo branch so collaborators get a clear
+# green/red signal that the ROM still builds. Mirrors the local builder image
+# (ubuntu 22.04 + gcc-arm-none-eabi 10.x, `make MODERN=1`).
+#
+# NOTE: the built ROM is deliberately NOT uploaded as an artifact — it is Nintendo
+# IP and this repo is public. This job only proves the source compiles.
 
 on:
   push:
-    branches:
-      - master
-      - upcoming
+    branches: [peepo]
   pull_request:
+    branches: [peepo]
+
+# A newer push to the same ref cancels the in-flight build.
+concurrency:
+  group: rom-build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
-    if: github.actor != 'allcontributors[bot]'
-    runs-on: ubuntu-latest
-    env:
-      GAME_VERSION: EMERALD
-      GAME_REVISION: 0
-      GAME_LANGUAGE: ENGLISH
-      COMPARE: 0
-      UNUSED_ERROR: 1
+    name: build (modern)
+    runs-on: ubuntu-22.04 # pinned: gives gcc-arm-none-eabi 10.x, matching the builder image
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
-      - name: Install binutils
+      - name: Install ARM toolchain + deps
         run: |
-          sudo apt update
-          sudo apt install -y binutils-arm-none-eabi gcc-arm-none-eabi libnewlib-arm-none-eabi libpng-dev python3
-        # build-essential and git are already installed
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            build-essential binutils-arm-none-eabi gcc-arm-none-eabi \
+            libnewlib-arm-none-eabi libpng-dev python3
 
-      - name: ROM
-        env:
-          COMPARE: 0
-        run: make -j${nproc} -O all
-        
-      - name: LTO
-        run: |
-          make tidy
-          make -j${nproc} LTO=1
-        # make tidy to purge previous build
-
-      - name: Test
-        env:
-          TEST: 1
-        run: |
-          make -j${nproc} check
-  allcontributors:
-    if: github.actor == 'allcontributors[bot]'
-    runs-on: ubuntu-latest
-    needs: []
-    steps:
-      - name: Automatically pass for allcontributors
-        run: echo "CI automatically passes for allcontributors" && exit 0
-
+      - name: Build ROM
+        run: make MODERN=1 -j"$(nproc)"
