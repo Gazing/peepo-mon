@@ -4,9 +4,10 @@ name: ROM build
 # green/red signal that the ROM still builds. Mirrors the local builder image
 # (ubuntu 22.04 + gcc-arm-none-eabi 10.x, `make MODERN=1`).
 #
-# NOTE: the built ROM is NOT uploaded — it is Nintendo IP and this repo is public.
-# This job only proves the source compiles; the app serves the ROM as a static asset,
-# built + deployed separately.
+# NOTE: the built ROM is NOT uploaded — it is Nintendo IP and this repo is public. This job
+# proves the source compiles, then (on a push to peepo only) pings the MAIN repo's deploy
+# workflow, which rebuilds the ROM from source and ships it as a static asset — see the
+# "Trigger main-repo deploy" step. No Cloudflare/ROM artifacts ever leave this repo.
 
 on:
   push:
@@ -36,3 +37,25 @@ jobs:
 
       - name: Build ROM
         run: make MODERN=1 -j"$(nproc)"
+
+      # A merged ROM change (push to peepo) tells the MAIN repo to redeploy — it rebuilds this
+      # ROM from source + ships it. Uses workflow_dispatch via the API with a fine-grained PAT
+      # scoped to "Actions: write" on the main repo ONLY (a leak could then only trigger deploys
+      # — not read secrets or push code). Never on PRs. Skips cleanly if the token isn't set, and
+      # a dispatch failure only warns (the ROM build check itself stays authoritative).
+      - name: Trigger main-repo deploy
+        if: github.event_name == 'push'
+        env:
+          TOKEN: ${{ secrets.MAIN_DEPLOY_TOKEN }}
+          REF: ${{ vars.MAIN_DEPLOY_REF || 'master' }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "MAIN_DEPLOY_TOKEN not set — skipping deploy trigger."; exit 0
+          fi
+          code=$(curl -s -o /dev/null -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/Gazing/discord-gpt2-bot/actions/workflows/peepoactivity-deploy.yml/dispatches" \
+            -d "{\"ref\":\"$REF\"}")
+          echo "Deploy dispatch -> HTTP $code (204 = success)."
+          [ "$code" = "204" ] || echo "::warning::deploy trigger returned $code, not 204 (check MAIN_DEPLOY_TOKEN scope + that peepoactivity-deploy.yml exists on ref '$REF')"
