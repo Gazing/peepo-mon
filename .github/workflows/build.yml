@@ -4,10 +4,9 @@ name: ROM build
 # green/red signal that the ROM still builds. Mirrors the local builder image
 # (ubuntu 22.04 + gcc-arm-none-eabi 10.x, `make MODERN=1`).
 #
-# On a trusted push to peepo it ALSO publishes the built ROM to R2 (private) for the
-# app to serve. On PRs it is compile-check ONLY — the R2 upload is gated to push
-# events so an untrusted PR (public repo) can never reach the Cloudflare secrets. The
-# ROM is never exposed as a public GitHub artifact (Nintendo IP + public repo).
+# NOTE: the built ROM is NOT uploaded — it is Nintendo IP and this repo is public.
+# This job only proves the source compiles; the app serves the ROM as a static asset,
+# built + deployed separately.
 
 on:
   push:
@@ -37,22 +36,3 @@ jobs:
 
       - name: Build ROM
         run: make MODERN=1 -j"$(nproc)"
-
-      - name: Package ROM (gzip — the client inflates it)
-        if: github.event_name == 'push'
-        run: gzip -9 -c pokeemerald.gba > game.gba.gz
-
-      # Publish to R2 — ONLY on push to peepo (collaborators with write access), never on
-      # PRs. Requires repo secrets CLOUDFLARE_API_TOKEN (scope it to R2 write on this bucket
-      # ONLY) + CLOUDFLARE_ACCOUNT_ID. Bucket/key overridable via repo Variables.
-      - name: Deploy ROM to R2
-        if: github.event_name == 'push'
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          BUCKET: ${{ vars.ROM_R2_BUCKET || 'peepo-rom' }}
-          KEY: ${{ vars.ROM_R2_KEY || 'game.gba.gz' }}
-        run: |
-          npx --yes wrangler@4 r2 object put "$BUCKET/$KEY" \
-            --file game.gba.gz --remote --content-type application/octet-stream
-          echo "Published $KEY -> R2 bucket $BUCKET"
