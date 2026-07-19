@@ -63,6 +63,7 @@
 
 #if DEXNAV_ENABLED
 STATIC_ASSERT(DN_FLAG_SEARCHING != 0, DNFlagSearching_Must_Not_Be_Zero);
+STATIC_ASSERT(DEXNAV_TIMEOUT * 60 <= 32767, DexNavTimeout_Must_Fit_S16_TaskData);
 STATIC_ASSERT(DN_FLAG_DETECTOR_MODE != 0, DNFlagDetectorMode_Must_Not_Be_Zero);
 STATIC_ASSERT(DN_VAR_SPECIES != 0, DNVarSpecies_Must_Not_Be_Zero);
 STATIC_ASSERT(DN_VAR_STEP_COUNTER != 0, DNVarStepCounter_Must_Not_Be_Zero);
@@ -1011,6 +1012,15 @@ static void EndDexNavSearchSetupScript(const u8 *script, u8 taskId)
     ScriptContext_SetupScript(script);
 }
 
+// peepo: message WITHOUT resetting the catch chain — for unrevealed hidden-mon
+// despawns, which stock ended silently (chain intact). Only the message is new;
+// the chain semantics stay stock.
+static void EndDexNavSearchKeepChainSetupScript(const u8 *script, u8 taskId)
+{
+    EndDexNavSearch(taskId);
+    ScriptContext_SetupScript(script);
+}
+
 static u8 GetMovementProximityBySearchLevel(void)
 {
     if (sDexNavSearchDataPtr->searchLevel < 20)
@@ -1072,7 +1082,7 @@ static void Task_DexNavSearch(u8 taskId)
     if (sDexNavSearchDataPtr->proximity > MAX_PROXIMITY)
     { // out of range
         if (sDexNavSearchDataPtr->hiddenSearch && !task->tRevealed)
-            EndDexNavSearch(taskId);
+            EndDexNavSearchKeepChainSetupScript(EventScript_LostSignal, taskId); // peepo: say why (was silent)
         else
             EndDexNavSearchSetupScript(EventScript_LostSignal, taskId);
         return;
@@ -1081,7 +1091,7 @@ static void Task_DexNavSearch(u8 taskId)
     if (sDexNavSearchDataPtr->proximity <= CREEPING_PROXIMITY && !gPlayerAvatar.creeping && task->tFrameCount > 60)
     { //should be creeping but player walks normally
         if (sDexNavSearchDataPtr->hiddenSearch && !task->tRevealed)
-            EndDexNavSearch(taskId);
+            EndDexNavSearchKeepChainSetupScript(EventScript_MovedTooFast, taskId); // peepo: say why (was silent)
         else
             EndDexNavSearchSetupScript(EventScript_MovedTooFast, taskId);
         return;
@@ -1103,7 +1113,7 @@ static void Task_DexNavSearch(u8 taskId)
     if (gTasks[taskId].tFrameCount > DEXNAV_TIMEOUT * 60)
     { // player took too long
         if (sDexNavSearchDataPtr->hiddenSearch && !task->tRevealed)
-            EndDexNavSearch(taskId);
+            EndDexNavSearchKeepChainSetupScript(EventScript_PokemonGotAway, taskId); // peepo: say why (was silent)
         else
             EndDexNavSearchSetupScript(EventScript_PokemonGotAway, taskId);
         return;
