@@ -9,11 +9,44 @@ name: ROM build
 # workflow, which rebuilds the ROM from source and ships it as a static asset — see the
 # "Trigger main-repo deploy" step. No Cloudflare/ROM artifacts ever leave this repo.
 
+# Only run when something that can actually affect the ROM changes — a docs/CI-only commit
+# shouldn't burn a ~2.5 min build (and, on push, shouldn't trigger a redeploy either).
+# (GitHub Actions doesn't expand YAML anchors, so the list is duplicated.)
 on:
   push:
     branches: [peepo]
+    paths:
+      - "src/**"
+      - "gflib/**"
+      - "include/**"
+      - "data/**"
+      - "graphics/**"
+      - "sound/**"
+      - "asm/**"
+      - "tools/**"
+      - "libagbsyscall/**"
+      - "Makefile"
+      - "**/*.mk"
+      - "ld_script*.ld"
+      - "charmap.txt"
+      - ".github/workflows/build.yml"
   pull_request:
     branches: [peepo]
+    paths:
+      - "src/**"
+      - "gflib/**"
+      - "include/**"
+      - "data/**"
+      - "graphics/**"
+      - "sound/**"
+      - "asm/**"
+      - "tools/**"
+      - "libagbsyscall/**"
+      - "Makefile"
+      - "**/*.mk"
+      - "ld_script*.ld"
+      - "charmap.txt"
+      - ".github/workflows/build.yml"
 
 # A newer push to the same ref cancels the in-flight build.
 concurrency:
@@ -28,12 +61,23 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # Cache the downloaded .debs so repeat runs skip re-fetching the ARM toolchain (~20-30s).
+      # apt still installs them each run; only the download is saved.
+      - name: Cache apt packages
+        uses: actions/cache@v4
+        with:
+          path: ~/apt-cache
+          key: apt-arm-toolchain-ubuntu2204-v1
+
       - name: Install ARM toolchain + deps
         run: |
+          mkdir -p ~/apt-cache/partial
           sudo apt-get update -qq
-          sudo apt-get install -y -qq \
+          sudo apt-get -o Dir::Cache::archives="$HOME/apt-cache" install -y -qq \
             build-essential binutils-arm-none-eabi gcc-arm-none-eabi \
             libnewlib-arm-none-eabi libpng-dev python3
+          # apt writes as root; hand it back so actions/cache can save the dir
+          sudo chown -R "$(id -u):$(id -g)" ~/apt-cache
 
       - name: Build ROM
         run: make MODERN=1 -j"$(nproc)"
