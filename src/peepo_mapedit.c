@@ -529,11 +529,38 @@ void PeepoMapEdit_DoFieldMovePlaced(void)
             && FindObjAt(nlx, nly) < 0
             && MapGridGetCollisionAt(nlx + MAP_OFFSET, nly + MAP_OFFSET) == 0)
         {
-            DelObj(sFMLx, sFMLy);
+            s16 oi = FindObjAt(sFMLx, sFMLy);
+            s16 slot;
+
+            if (oi < 0)
+                return;
+            // Move the record IN PLACE — keeping both its sObjs index and its
+            // render-pool slot. The old delete-then-re-add freed the index (so
+            // the pool never moved the local object event: sprite AND collision
+            // stayed at the source tile), and freeing the pool slot mid-move can
+            // hand it to a 9th in-range object on a full pool, leaving the moved
+            // boulder unrendered. The live object event just moves; the wire
+            // protocol stays delete+add, which peers already reconcile per packet.
+            sObjs[oi].lx = nlx;
+            sObjs[oi].ly = nly;
+            sObjDirty = TRUE;
+            // KNOWN DEFERRED DEFECT (remote side): the wire has no MOVE opcode, so
+            // peers see delete+add and reconcile between them — on a full render
+            // pool the freed slot can go to a lower-indexed waiting object and the
+            // moved boulder stays unrendered for that peer until range churn.
+            // Add-first is no better (deterministically loses the same dense case,
+            // and with all 48 records occupied the add is DROPPED, losing the
+            // record outright — worse). Delete-first at least never loses the
+            // record. A real fix is an atomic MOVE opcode, which requires a
+            // server-side protocol change outside this repo.
             SendObj(sFMLx, sFMLy, 0, EDIT_DELETE);
-            SetObj(nlx, nly, sFMGfx);
             SendObj(nlx, nly, sFMGfx, 0);
-            ReconcileObjects();
+            slot = PoolSlotOfObj(oi);
+            if (slot >= 0) // rendered: move the live object event (takes map-local coords)
+                TryMoveObjectEventToMapCoords(OBJ_LOCALID_BASE + slot,
+                    gSaveBlock1Ptr->location.mapNum, gSaveBlock1Ptr->location.mapGroup,
+                    nlx, nly);
+            ReconcileObjects(); // covers the not-currently-rendered case
             PlaySE(SE_M_STRENGTH);
         }
     }
