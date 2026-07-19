@@ -2727,10 +2727,28 @@ void TryIncrementSpeciesSearchLevel()
 
 void ResetDexNavSearch(void)
 {
+    u8 taskId;
+
     gSaveBlock3Ptr->dexNavChain = 0;    //reset dex nav chaining on new map
     VarSet(DN_VAR_STEP_COUNTER, 0); //reset hidden pokemon step counter
     if (FlagGet(DN_FLAG_SEARCHING))
-        EndDexNavSearch(FindTaskIdByFunc(Task_DexNavSearch));   //moving to new map ends dexnav search
+    {
+        // The live search task spends exactly one frame as Task_RevealHiddenMon
+        // during a hidden-mon reveal. A seamless map-connection step landing on
+        // that frame made the Task_DexNavSearch lookup return TASK_NONE (0xFF),
+        // which DestroyTask would use to index far past gTasks[16], and the
+        // teardown would free the search state under the still-live task — OOB
+        // write + use-after-free. Look up both functions and never pass
+        // TASK_NONE onward. (Upstream later restructured this teardown to be
+        // task-agnostic, which removes the hazard class entirely.)
+        taskId = FindTaskIdByFunc(Task_DexNavSearch);
+        if (taskId == TASK_NONE)
+            taskId = FindTaskIdByFunc(Task_RevealHiddenMon);
+        if (taskId != TASK_NONE)
+            EndDexNavSearch(taskId);   //moving to new map ends dexnav search
+        else
+            FlagClear(DN_FLAG_SEARCHING); // no live task despite the flag: clear it, nothing to tear down
+    }
 }
 
 void IncrementDexNavChain(void)
