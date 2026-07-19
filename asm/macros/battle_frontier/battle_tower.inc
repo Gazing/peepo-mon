@@ -111,6 +111,7 @@
 	setvar VAR_0x8004, FRONTIER_UTIL_FUNC_SAVE_PARTY
 	special CallFrontierUtilFunc
 	special LoadPlayerParty
+	special PeepoHardcore_ReleaseFainted @ peepo: release was deferred during the combined-party battle; run it on the restored REAL party
 	.endm
 
 	.macro multi_2_vs_2 trainer1Id:req, trainer1LoseText:req, trainer2Id:req, trainer2LoseText:req, partnerId:req
@@ -140,6 +141,7 @@
 	setvar VAR_0x8004, FRONTIER_UTIL_FUNC_SAVE_PARTY
 	special CallFrontierUtilFunc
 	special LoadPlayerParty
+	special PeepoHardcore_ReleaseFainted @ peepo: release was deferred during the combined-party battle; run it on the restored REAL party
 	.endm
 
 	.macro multi_fixed_2_vs_2 trainer1Id:req, trainer1LoseText:req, trainer2Id:req, trainer2LoseText:req, partnerId:req
