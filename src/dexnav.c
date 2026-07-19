@@ -2643,7 +2643,7 @@ bool8 TryFindHiddenPokemon(void)
                     index = ChooseHiddenMonIndex();
                     if (index == 0xFF)
                         return FALSE;//no hidden info
-                    species = hiddenMonsInfo->wildPokemon[index].species;
+                    species = DexNavWildSpecies(hiddenMonsInfo->wildPokemon[index].species); // remap: the land hidden path above wraps, this one didn't
                     isHiddenMon = TRUE;
                     environment = ENCOUNTER_TYPE_HIDDEN;
                 }
