@@ -539,8 +539,17 @@ void PeepoMapEdit_DoFieldMovePlaced(void)
             sObjs[oi].lx = nlx;
             sObjs[oi].ly = nly;
             sObjDirty = TRUE;
-            SendObj(sFMLx, sFMLy, 0, EDIT_DELETE);
+            // ADD before DELETE on the wire: peers reconcile per packet, so
+            // delete-first frees the boulder's render slot for a waiting 9th
+            // object on a full pool, and the add then finds the pool full — the
+            // boulder goes invisible/non-collidable for that peer until a range
+            // re-cycle. Add-first makes the delete's own reconcile the healing
+            // step: it frees a slot with the destination record already present.
+            // Residual (rare): an earlier-indexed waiting object can still win
+            // that slot; a true single MOVE opcode would need a server-side
+            // protocol change, out of this repo's scope.
             SendObj(nlx, nly, sFMGfx, 0);
+            SendObj(sFMLx, sFMLy, 0, EDIT_DELETE);
             slot = PoolSlotOfObj(oi);
             if (slot >= 0) // rendered: move the live object event (takes map-local coords)
                 TryMoveObjectEventToMapCoords(OBJ_LOCALID_BASE + slot,
