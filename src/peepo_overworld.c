@@ -569,6 +569,8 @@ static bool8 RemoteRenderPos(struct RemotePlayer *r, s16 *outX, s16 *outY, bool8
 // the queued path one tile per finished step; snaps on big drift. Peers keep
 // animating even while we're in a menu/dialog (their sprites are re-thawed each
 // frame), so there's no backlog to snap through on exit.
+static void RemoveRemoteFollower(u32 slotIdx); // defined below; needed by the ghost sweep here
+
 static void ReconcileRemote(struct RemotePlayer *r, u32 slotIdx)
 {
     u8 localId = REMOTE_LOCALID_BASE + slotIdx;
