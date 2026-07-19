@@ -12,7 +12,7 @@
 #define DN_VAR_STEP_COUNTER           0x4083 // Steps for finding hidden pokemon (VAR_UNUSED_0x4083)
 
 // Search parameters
-#define DEXNAV_TIMEOUT                  60  // Seconds before the search despawns (resets on reveal). Max of 1092 seconds allowed. Upstream's 15 was untenable against the 12x12-tile spawn box at creep speed.
+#define DEXNAV_TIMEOUT                  60  // Seconds before the search despawns (resets on reveal). Max of 546 seconds (frame counter is s16 task data: 32767/60; the old "1092" comment assumed u16). Upstream's 15 was untenable against the 12x12-tile spawn box at creep speed.
 #define SNEAKING_PROXIMITY              4   // Tile amount
 #define CREEPING_PROXIMITY              2
 #define MAX_PROXIMITY                   20
