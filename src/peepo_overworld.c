@@ -105,6 +105,10 @@ extern const u8 PeepoFollowerScript[];
 struct RemotePlayer
 {
     bool8 used;
+    bool8 ghost;        // avatar/follower object events couldn't be removed at leave/
+                        // timeout (we were in battle/menu); force-remove before the
+                        // next reconcile — survives slot reuse by a NEW peer, which
+                        // is exactly the case where stale graphics would be inherited
     u8 id;              // network id (peer slot)
     u8 mapGroup;
     u8 mapNum;
@@ -570,6 +574,18 @@ static void ReconcileRemote(struct RemotePlayer *r, u32 slotIdx)
     u8 localId = REMOTE_LOCALID_BASE + slotIdx;
     u8 myMapGroup = gSaveBlock1Ptr->location.mapGroup;
     u8 myMapNum = gSaveBlock1Ptr->location.mapNum;
+
+    // Slot reused by a NEW peer before the orphan sweep could run (packets drain
+    // during battle): the previous occupant's avatar/follower are still on the
+    // field and would be silently adopted with stale gender/shiny graphics.
+    // Force-remove them first so this peer spawns fresh. (Only reached when
+    // InOverworld() — the caller gates on it.)
+    if (r->ghost)
+    {
+        RemoveObjectEventByLocalIdAndMap(localId, myMapNum, myMapGroup);
+        RemoveRemoteFollower(slotIdx);
+        r->ghost = FALSE;
+    }
     s16 efx = 0, efy = 0;      // effective render position in OUR coord frame
     bool8 sameMap = FALSE;
     bool8 render = RemoteRenderPos(r, &efx, &efy, &sameMap);
@@ -929,6 +945,10 @@ void PeepoOverworld_Update(void)
                         gSaveBlock1Ptr->location.mapNum, gSaveBlock1Ptr->location.mapGroup);
                     RemoveRemoteFollower((u32)(r - sRemotes));
                 }
+                else
+                {
+                    r->ghost = TRUE; // can't touch object events now — force-remove later
+                }
                 FreeRemotePalette(r->id);
                 r->used = FALSE;
             }
@@ -1011,6 +1031,7 @@ void PeepoOverworld_Update(void)
                 RemoveObjectEventByLocalIdAndMap(REMOTE_LOCALID_BASE + i,
                     gSaveBlock1Ptr->location.mapNum, gSaveBlock1Ptr->location.mapGroup);
                 RemoveRemoteFollower(i);
+                r->ghost = FALSE; // orphans (if any) are gone
             }
             continue;
         }
@@ -1021,6 +1042,10 @@ void PeepoOverworld_Update(void)
                 RemoveObjectEventByLocalIdAndMap(REMOTE_LOCALID_BASE + i,
                     gSaveBlock1Ptr->location.mapNum, gSaveBlock1Ptr->location.mapGroup);
                 RemoveRemoteFollower(i);
+            }
+            else
+            {
+                r->ghost = TRUE; // can't touch object events now — force-remove later
             }
             FreeRemotePalette(r->id);
             r->used = FALSE;
