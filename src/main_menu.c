@@ -1923,7 +1923,9 @@ static void Task_PeepoHardcore_MenuInput(u8 taskId)
 
 static void Task_PeepoHardcore_Begin(u8 taskId)
 {
-    sRandoHardcore = 0; // default Off
+    // No reset here: the once-per-attempt init in Task_PeepoRando_Begin supplies
+    // the Off default, and resetting on every entry would re-wipe the player's
+    // Hardcore choice on the name-reject loop (the exact bug the guard fixes).
     PeepoHardcore_Refresh();
     gTasks[taskId].func = Task_PeepoHardcore_MenuInput;
 }
