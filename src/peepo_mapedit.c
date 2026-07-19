@@ -635,6 +635,14 @@ static void HandleRemoteEdit(const u8 *p, u32 n)
     SetCell(lx, ly, val, flags);
     rx = lx + MAP_OFFSET;
     ry = ly + MAP_OFFSET;
+    // If our tile-brush preview sits on this exact cell, drop the preview claim:
+    // its saved restore-entry predates this edit, and restoring it on the next
+    // cursor move would silently revert the peer's committed tile AND collision
+    // (for us only — a lasting desync until the next snapshot). The preview
+    // re-shows on the next cursor step; until then the peer's new tile showing
+    // through is honest feedback that the cell just changed under us.
+    if (sTilePrev && rx == sCursorX && ry == sCursorY)
+        sTilePrev = FALSE;
     CurrentMapDrawMetatileAt(rx, ry); // live single-tile redraw
 }
 
