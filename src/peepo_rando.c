@@ -5,6 +5,7 @@
 #include "battle_transition.h" // enum MugshotColor (boss-trainer marker)
 #include "constants/species.h"
 #include "constants/abilities.h"
+#include "constants/trainers.h" // trainer classes (boss detection)
 
 // A scaled-mode replacement's base-stat total must be within this of the original.
 #define PEEPO_RANDO_BST_BAND   70
@@ -175,9 +176,26 @@ bool8 PeepoRando_IsBossTrainer(const struct Trainer *trainer)
 {
     if (trainer == NULL)
         return FALSE;
-    // Gym leaders, the Elite Four and the Champion get intro mugshots; reuse that
-    // as the "important battle" marker. In expansion 1.14 the old mugshotEnabled
-    // bool became a mugshotColor enum (MUGSHOT_COLOR_NONE == no mugshot).
+    // "Boss" = story-significant trainer CLASS. The old mugshot-only check
+    // covered exactly the five trainers with mugshots in trainers.party (the
+    // Elite Four + Wallace), so "No Bosses" still randomized every Gym Leader,
+    // the team leaders/admins, and the rival. Class membership is robust across
+    // difficulty variants; the mugshot stays as an opt-in fallback so a custom
+    // trainer can be marked a boss by giving it one.
+    switch (trainer->trainerClass)
+    {
+    case TRAINER_CLASS_LEADER:
+    case TRAINER_CLASS_ELITE_FOUR:
+    case TRAINER_CLASS_CHAMPION:
+    case TRAINER_CLASS_MAGMA_LEADER:
+    case TRAINER_CLASS_MAGMA_ADMIN:
+    case TRAINER_CLASS_AQUA_LEADER:
+    case TRAINER_CLASS_AQUA_ADMIN:
+    case TRAINER_CLASS_RIVAL: // debatable for the early low-stakes fights — drop this line to randomize rivals
+        return TRUE;
+    default:
+        break;
+    }
     return trainer->mugshotColor != MUGSHOT_COLOR_NONE;
 }
 
