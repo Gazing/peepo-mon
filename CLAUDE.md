@@ -31,7 +31,6 @@ Multiplayer Pokémon Emerald romhack base: [rh-hideout/pokeemerald-expansion](ht
 ## Known debt
 
 - Littleroot test-starter hook in `wild_encounter.c` (`sPeepoTestStarters`) ships ungated — its own comment says remove for production.
-- Network-supplied `mapGroup`/`mapNum` are dereferenced without range validation (`gMapGroups[][]`) — hostile-packet OOB read.
 
 ## Contributing (human or AI-assisted)
 
