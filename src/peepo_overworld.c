@@ -19,7 +19,6 @@
 #include "script.h"
 #include "string_util.h"
 #include "constants/rgb.h"
-#include "constants/maps.h" // WARP_ID_NONE (admin teleport-to-player)
 
 // peepo: a solo, NON-FREEZING battery autosave. Reuses the game's own incremental
 // full-save primitives (LinkFullSave_*) but writes ONE sector per frame and skips
