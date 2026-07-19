@@ -13,6 +13,7 @@
 #include "constants/moves.h"
 #include "constants/abilities.h"
 #include "item.h"
+#include "safari_zone.h" // gNumSafariBalls (hardcore route-block refund)
 #include "util.h"
 #include "pokemon.h"
 #include "random.h"
@@ -13560,6 +13561,18 @@ static void Cmd_handleballthrow(void)
     else if (PeepoHardcore_IsEnabled() && PeepoHardcore_RouteAlreadyCaught())
     {
         // Hardcore nuzlocke: one catch per route — bounce the ball with a message.
+        // REFUND the ball first: the action handlers consume it before this command
+        // runs, and the block path skips the normal miss path's out-of-balls
+        // bookkeeping — without the refund a blocked Safari throw wasted the ball,
+        // a throw at zero underflowed the u8 counter to 255, and fleeing at zero
+        // stranded CB2_EndSafariBattle with no matching outcome (soft-lock). The
+        // refund keeps the count above zero on blocked routes, so those states
+        // can't arise; legitimate throws still exhaust balls through the normal
+        // miss path, which sets B_OUTCOME_NO_SAFARI_BALLS correctly.
+        if (gBattleTypeFlags & BATTLE_TYPE_SAFARI)
+            gNumSafariBalls++;
+        else if (!GetItemImportance(gLastUsedItem))
+            AddBagItem(gLastUsedItem, 1); // wild-battle block: return the real ball too
         BtlController_EmitBallThrowAnim(gBattlerAttacker, B_COMM_TO_CONTROLLER, BALL_TRAINER_BLOCK);
         MarkBattlerForControllerExec(gBattlerAttacker);
         gBattlescriptCurrInstr = BattleScript_PeepoRouteBallBlock;
