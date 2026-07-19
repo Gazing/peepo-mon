@@ -1298,8 +1298,16 @@ static void HighlightSelectedMainMenuItem(u8 menuType, u8 selectedMenuItem, s16 
 #define tBrendanSpriteId data[10]
 #define tMaySpriteId data[11]
 
+// One-shot guard: the rando/hardcore option VALUES reset once per New Game ATTEMPT
+// (set FALSE here in Init), not on every visit to the rando screen — rejecting the
+// entered name loops back through gender select and re-enters Task_PeepoRando_Begin,
+// which used to silently wipe every chosen setting.
+static EWRAM_DATA bool8 sRandoInitialized = FALSE;
+
 static void Task_NewGameBirchSpeech_Init(u8 taskId)
 {
+    sRandoInitialized = FALSE; // fresh New Game attempt: option values reset once
+
     SetGpuReg(REG_OFFSET_DISPCNT, 0);
     SetGpuReg(REG_OFFSET_DISPCNT, DISPCNT_OBJ_ON | DISPCNT_OBJ_1D_MAP);
     InitBgFromTemplate(&sBirchBgTemplate);
@@ -1843,13 +1851,21 @@ static void Task_PeepoRando_MenuInput(u8 taskId)
 
 static void Task_PeepoRando_Begin(u8 taskId)
 {
+    // UI nav state resets every entry (menu opens at the top list)...
     sRandoMode = RANDO_MODE_MAIN;
     sRandoCursor = 0;
-    sRandoSpeciesMode = 0;
-    sRandoTrainer = 0;
-    sRandoAbility = 0;
-    sRandoHardcore = 0;
-    gSaveBlock2Ptr->peepoRandoFlags = 0;
+    // ...but the chosen VALUES reset only once per New Game attempt, so the
+    // name-reject loop (No/B at "So it's <name>?" -> gender -> back here)
+    // can't silently wipe the player's selections.
+    if (!sRandoInitialized)
+    {
+        sRandoSpeciesMode = 0;
+        sRandoTrainer = 0;
+        sRandoAbility = 0;
+        sRandoHardcore = 0;
+        gSaveBlock2Ptr->peepoRandoFlags = 0;
+        sRandoInitialized = TRUE;
+    }
     // Show the menu and the first tooltip in the (kept-visible) dialogue box.
     PeepoRando_Refresh();
     gTasks[taskId].func = Task_PeepoRando_MenuInput;
