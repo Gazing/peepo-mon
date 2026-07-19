@@ -999,7 +999,21 @@ void PeepoOverworld_Update(void)
     {
         struct RemotePlayer *r = &sRemotes[i];
         if (!r->used)
+        {
+            // A peer that left or timed out while we were in a battle/menu couldn't
+            // be despawned at that moment (object events are only safe to touch in
+            // the overworld), and the return-to-field path re-materializes every
+            // still-active object event — leaving a frozen, collidable ghost until
+            // the next real map warp. Sweep the orphan here instead; both removals
+            // are existence-checked no-ops when nothing lingers.
+            if (InOverworld())
+            {
+                RemoveObjectEventByLocalIdAndMap(REMOTE_LOCALID_BASE + i,
+                    gSaveBlock1Ptr->location.mapNum, gSaveBlock1Ptr->location.mapGroup);
+                RemoveRemoteFollower(i);
+            }
             continue;
+        }
         if ((u16)(sFrame - r->lastSeen) > REMOTE_TIMEOUT_FRAMES)
         {
             if (InOverworld())
