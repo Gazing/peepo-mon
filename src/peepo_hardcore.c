@@ -1,4 +1,5 @@
 #include "global.h"
+#include "battle.h" // gBattleTypeFlags (partner-battle release deferral)
 #include "peepo_hardcore.h"
 #include "peepo_rando.h"
 #include "pokemon.h"
@@ -67,10 +68,20 @@ void PeepoHardcore_ReleaseFainted(void)
 
 // Called every frame from the main loop. The instant a battle ends (inBattle
 // 1->0) we release any mon that fainted — one hook covering every battle type.
+// EXCEPT partner multi-battles: there gPlayerParty is the COMBINED party
+// (player slots 0-2 + partner slots 3-5) until the post-battle script restores
+// it, and releasing/compacting the combined party lets SaveSelectedParty copy a
+// PARTNER's shifted mon into the player's save — permanent corruption. Those
+// battles release via the scripted special after LoadPlayerParty instead
+// (multi_do in asm/macros/battle_frontier/battle_tower.inc).
 void PeepoHardcore_Tick(void)
 {
     static bool8 sWasInBattle = FALSE;
-    if (sWasInBattle && !gMain.inBattle && PeepoHardcore_IsEnabled())
+    static bool8 sHadPartner = FALSE;
+
+    if (gMain.inBattle)
+        sHadPartner = (gBattleTypeFlags & BATTLE_TYPE_PLAYER_HAS_PARTNER) != 0;
+    if (sWasInBattle && !gMain.inBattle && PeepoHardcore_IsEnabled() && !sHadPartner)
         PeepoHardcore_ReleaseFainted();
     sWasInBattle = gMain.inBattle;
 }
