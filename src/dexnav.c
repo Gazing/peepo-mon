@@ -581,10 +581,14 @@ static void RemoveDexNavWindowAndGfx(void)
     FreeSpritePaletteByTag(HELD_ITEM_TAG);
     SafeFreeMonIconPalette(sDexNavSearchDataPtr->species);
 
-    // remove window
-    ClearStdWindowAndFrameToTransparent(sDexNavSearchDataPtr->windowId, FALSE);
-    CopyWindowToVram(sDexNavSearchDataPtr->windowId, 3);
-    RemoveWindow(sDexNavSearchDataPtr->windowId);
+    // remove window — guarded: the hidden-mon reveal branch removes it early and
+    // sentinels the id, and RemoveWindow is not safe to run twice on the same id.
+    if (sDexNavSearchDataPtr->windowId != WINDOW_NONE)
+    {
+        ClearStdWindowAndFrameToTransparent(sDexNavSearchDataPtr->windowId, FALSE);
+        CopyWindowToVram(sDexNavSearchDataPtr->windowId, 3);
+        RemoveWindow(sDexNavSearchDataPtr->windowId);
+    }
 }
 
 
@@ -1140,6 +1144,13 @@ static void Task_DexNavSearch(u8 taskId)
         CopyWindowToVram(sDexNavSearchDataPtr->windowId, 3);
         RemoveWindow(sDexNavSearchDataPtr->windowId);
         DestroySprite(&gSprites[sDexNavSearchDataPtr->iconSpriteId]);
+        // Sentinel both ids NOW: if the search is torn down during the one-frame
+        // reveal window (map-seam ResetDexNavSearch), RemoveDexNavWindowAndGfx
+        // must not remove this window or destroy this sprite slot a second time
+        // (RemoveWindow isn't idempotent; the sprite slot may have been reused).
+        // Task_RevealHiddenMon assigns fresh ids when it draws the revealed UI.
+        sDexNavSearchDataPtr->windowId = WINDOW_NONE;
+        sDexNavSearchDataPtr->iconSpriteId = MAX_SPRITES;
         task->tRevealed = TRUE; //regular dexnav search
         //sDexNavSearchDataPtr->hiddenSearch = FALSE; //now its a regular dexnav search
         task->func = Task_RevealHiddenMon;
