@@ -524,17 +524,29 @@ void PeepoMapEdit_DoFieldMovePlaced(void)
             && FindObjAt(nlx, nly) < 0
             && MapGridGetCollisionAt(nlx + MAP_OFFSET, nly + MAP_OFFSET) == 0)
         {
-            DelObj(sFMLx, sFMLy);
+            s16 oi = FindObjAt(sFMLx, sFMLy);
+            s16 slot;
+
+            if (oi < 0)
+                return;
+            // Move the record IN PLACE — keeping both its sObjs index and its
+            // render-pool slot. The old delete-then-re-add freed the index (so
+            // the pool never moved the local object event: sprite AND collision
+            // stayed at the source tile), and freeing the pool slot mid-move can
+            // hand it to a 9th in-range object on a full pool, leaving the moved
+            // boulder unrendered. The live object event just moves; the wire
+            // protocol stays delete+add, which peers already reconcile per packet.
+            sObjs[oi].lx = nlx;
+            sObjs[oi].ly = nly;
+            sObjDirty = TRUE;
             SendObj(sFMLx, sFMLy, 0, EDIT_DELETE);
-            // Reconcile NOW, not just at the end: SetObj below reuses this freed
-            // sObjs index in place, and the render pool is keyed by index — without
-            // an intervening despawn the local object event never moves, leaving the
-            // boulder (and its collision) at the source tile for us while peers
-            // (whose remote path reconciles per packet) see it at the destination.
-            ReconcileObjects();
-            SetObj(nlx, nly, sFMGfx);
             SendObj(nlx, nly, sFMGfx, 0);
-            ReconcileObjects();
+            slot = PoolSlotOfObj(oi);
+            if (slot >= 0) // rendered: move the live object event (takes map-local coords)
+                TryMoveObjectEventToMapCoords(OBJ_LOCALID_BASE + slot,
+                    gSaveBlock1Ptr->location.mapNum, gSaveBlock1Ptr->location.mapGroup,
+                    nlx, nly);
+            ReconcileObjects(); // covers the not-currently-rendered case
             PlaySE(SE_M_STRENGTH);
         }
     }
