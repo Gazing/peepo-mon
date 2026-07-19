@@ -36,3 +36,5 @@ Multiplayer Pokémon Emerald romhack base: [rh-hideout/pokeemerald-expansion](ht
 ## Contributing (human or AI-assisted)
 
 One defect per branch per PR — never bundle unrelated changes, so a regression bisects to one small diff. PR bodies state the failure scenario and how the fix was verified (compile-only vs play-tested — say which honestly). AI-authored commits carry `Co-Authored-By: Claude <noreply@anthropic.com>` (or the equivalent for the tool used). Fork note: GitHub disables Actions on forks until enabled once in the Actions tab.
+
+Claude Code auto-loads this file; Codex auto-loads `AGENTS.md`, which is a thin pointer here — keep instructions in this one document.
