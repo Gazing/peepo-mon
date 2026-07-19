@@ -2159,6 +2159,42 @@ static void CopyMonToSummaryStruct(struct Pokemon *mon)
     }
 }
 
+// Pick the first enabled relearn category with moves for THIS screen's mon
+// (level-up -> egg -> TM -> tutor), set gMoveRelearnerState to it, and return
+// its count. Mirrors the maintained screen's TryUpdateRelearnType, which can't
+// be reused here: it reads and writes that screen's own static sMonSummaryScreen.
+// Also clears any stale category left by the NPC/party relearner, so START here
+// can't open the wrong list.
+static u8 BwSummary_UpdateRelearnState(struct Pokemon *mon)
+{
+    enum MoveRelearnerStates state;
+
+    for (state = MOVE_RELEARNER_LEVEL_UP_MOVES; state < MOVE_RELEARNER_COUNT; state++)
+    {
+        u8 count;
+
+        if (!CheckRelearnerStateFlag(state))
+            continue;
+
+        switch (state)
+        {
+        case MOVE_RELEARNER_EGG_MOVES:   count = GetNumberOfEggMoves(mon);   break;
+        case MOVE_RELEARNER_TM_MOVES:    count = GetNumberOfTMMoves(mon);    break;
+        case MOVE_RELEARNER_TUTOR_MOVES: count = GetNumberOfTutorMoves(mon); break;
+        default:                         count = GetNumberOfLevelUpMoves(mon); break;
+        }
+
+        if (count != 0)
+        {
+            gMoveRelearnerState = state;
+            return count;
+        }
+    }
+
+    gMoveRelearnerState = MOVE_RELEARNER_LEVEL_UP_MOVES; // nothing available: reset stale state
+    return 0;
+}
+
 static bool8 ExtractMonDataToSummaryStruct(struct Pokemon *mon)
 {
     u32 i;
@@ -2247,7 +2283,7 @@ static bool8 ExtractMonDataToSummaryStruct(struct Pokemon *mon)
         sum->ribbonCount = GetMonData(mon, MON_DATA_RIBBON_COUNT);        
         sum->teraType = GetMonData(mon, MON_DATA_TERA_TYPE);
         sum->isShiny = GetMonData(mon, MON_DATA_IS_SHINY);
-        sMonSummaryScreen->relearnableMovesNum = P_SUMMARY_SCREEN_MOVE_RELEARNER ? GetNumberOfLevelUpMoves(mon) : 0;
+        sMonSummaryScreen->relearnableMovesNum = P_SUMMARY_SCREEN_MOVE_RELEARNER ? BwSummary_UpdateRelearnState(mon) : 0; // all enabled categories, not just level-up
         return TRUE;
     }
     sMonSummaryScreen->switchCounter++;
