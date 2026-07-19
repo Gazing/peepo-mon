@@ -874,9 +874,10 @@ static void PeepoTeleportToRemote(u8 id)
 
     if (r == NULL)
         return;
-    // r->x / r->y are object-event coords (they include MAP_OFFSET); SetWarpDestination
-    // wants map-local coords, so strip the offset.
-    SetWarpDestination(r->mapGroup, r->mapNum, WARP_ID_NONE, r->x - MAP_OFFSET, r->y - MAP_OFFSET);
+    // r->x / r->y are object-event coords (they include MAP_OFFSET); the warp wants
+    // map-local coords, so strip the offset. XY16 variant: SetWarpDestination's s8
+    // x/y params truncate coords >= 128, miswarping on large maps.
+    SetWarpDestinationXY16(r->mapGroup, r->mapNum, r->x - MAP_OFFSET, r->y - MAP_OFFSET);
     DoTeleportTileWarp();
 }
 
