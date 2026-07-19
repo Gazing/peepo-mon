@@ -5,9 +5,12 @@
 #include "pokemon_storage_system.h" // CompactPartySlots
 #include "overworld.h"
 #include "fieldmap.h"
+#include "field_screen_effect.h" // FadeInFromBlack
+#include "palette.h"             // gPaletteFade
 #include "save.h"
 #include "main.h"
 #include "script.h"
+#include "task.h"
 #include "constants/species.h"
 
 // Game-over message shown on a hardcore whiteout (data/event_scripts.s).
@@ -75,9 +78,36 @@ void PeepoHardcore_Tick(void)
     sWasInBattle = gMain.inBattle;
 }
 
-void PeepoHardcore_OnWhiteOut(void)
+// ---- Hardcore game over -----------------------------------------------------
+// The game-over message must NOT run synchronously from DoWhiteOut:
+// RunScriptImmediately spins the script context in a tight C loop, but msgbox's
+// waitmessage only advances via tasks that loop never lets run — a hard freeze
+// before the save was ever erased. Instead the whiteout warps home normally and
+// CB2_WhiteOut installs this field callback, which erases the save while the
+// screen is still black, fades in, and schedules the message script; the
+// script's final callnative reboots. Erase-before-message makes game over
+// irreversible (power-cycling at the message can't rescue the save) — to get
+// the lenient order instead, move ClearSaveData into PeepoHardcore_GameOverReset.
+
+static void Task_PeepoHardcoreGameOver(u8 taskId)
 {
-    RunScriptImmediately(EventScript_PeepoHardcoreGameOver);
-    ClearSaveData(); // erase every save sector
-    DoSoftReset();   // reboot straight to the title screen (no save -> new game)
+    if (!gPaletteFade.active)
+    {
+        ScriptContext_SetupScript(EventScript_PeepoHardcoreGameOver);
+        DestroyTask(taskId);
+    }
+}
+
+void PeepoHardcore_FieldCB_GameOver(void)
+{
+    ClearSaveData(); // erase every save sector (screen is still black)
+    FadeInFromBlack();
+    CreateTask(Task_PeepoHardcoreGameOver, 10);
+    LockPlayerFieldControls();
+}
+
+// callnative target at the end of EventScript_PeepoHardcoreGameOver.
+void PeepoHardcore_GameOverReset(struct ScriptContext *ctx)
+{
+    DoSoftReset(); // no save left -> title screen offers only New Game
 }
