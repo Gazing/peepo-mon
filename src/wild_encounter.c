@@ -512,11 +512,19 @@ u8 PickWildMonNature(void)
     return Random() % NUM_NATURES;
 }
 
+// peepo: remap the raw encounter-table species through the randomizer exactly once,
+// here at the choke point every table-sourced caller funnels through. Callers whose
+// species is ALREADY final (DexNav passes its displayed, pre-remapped species) must
+// use CreateWildMonExact instead, or the species gets remapped twice and the battle
+// mon no longer matches what the player was shown.
 void CreateWildMon(u16 species, u8 level)
 {
-    bool32 checkCuteCharm = TRUE;
+    CreateWildMonExact(PeepoRando_MapSpecies(species, RANDO_KIND_WILD), level);
+}
 
-    species = PeepoRando_MapSpecies(species, RANDO_KIND_WILD);
+void CreateWildMonExact(u16 species, u8 level)
+{
+    bool32 checkCuteCharm = TRUE;
 
     ZeroEnemyPartyMons();
 

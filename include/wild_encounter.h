@@ -72,5 +72,6 @@ enum TimeOfDay GetTimeOfDayForEncounters(u32 headerId, enum WildPokemonArea area
 
 void PeepoForceEncounter(void); // peepo: admin "force encounter" command
 void PeepoForceEncounterSpecies(u16 species, u8 level); // peepo: admin force a specific mon
+void CreateWildMonExact(u16 species, u8 level); // peepo: CreateWildMon minus the randomizer remap (for already-final species)
 
 #endif // GUARD_WILD_ENCOUNTER_H
