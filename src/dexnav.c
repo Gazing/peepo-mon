@@ -461,11 +461,13 @@ static void AddSearchWindow(u8 width)
     if (sDexNavSearchDataPtr->tileY > (gSaveBlock1Ptr->pos.y + 7))
         y = 1;  //draw at top if chosen tile is below
 
-    LoadDexNavWindowGfx(sDexNavSearchDataPtr->windowId, 0x1d5, 14 * 16);
-
     SetWindowTemplateFields(&template, 0, 1, y, width, 3, 14, 8);
 
     sDexNavSearchDataPtr->windowId = AddWindow(&template);
+    // Load gfx AFTER the window exists: the old order loaded against whatever id
+    // the struct still held — a removed window's dummy template on re-reveal, or
+    // the WINDOW_NONE sentinel after the reveal-race fix (an out-of-range index).
+    LoadDexNavWindowGfx(sDexNavSearchDataPtr->windowId, 0x1d5, 14 * 16);
     FillWindowPixelBuffer(sDexNavSearchDataPtr->windowId, PIXEL_FILL(1));
     PutWindowTilemap(sDexNavSearchDataPtr->windowId);
     CopyWindowToVram(sDexNavSearchDataPtr->windowId, 3);
