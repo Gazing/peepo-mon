@@ -1,6 +1,7 @@
 #include "global.h"
 #include "battle.h"
 #include "battle_anim.h"
+#include "peepo_hardcore.h" // route-block check before ball consumption
 #include "battle_arena.h"
 #include "battle_environment.h"
 #include "battle_pyramid.h"
@@ -850,7 +851,11 @@ void HandleAction_ThrowBall(void)
     gBattle_BG0_X = 0;
     gBattle_BG0_Y = 0;
     gLastUsedItem = gBallToDisplay;
-    if (!GetItemImportance(gLastUsedItem))
+    // Don't consume the ball when the hardcore route-block will bounce this throw:
+    // a refund via AddBagItem would re-insert a last-copy ball at the END of the
+    // pocket, silently reordering the bag. Not consuming preserves position exactly.
+    if (!GetItemImportance(gLastUsedItem)
+        && !(PeepoHardcore_IsEnabled() && PeepoHardcore_RouteAlreadyCaught()))
     	RemoveBagItem(gLastUsedItem, 1);
     gBattlescriptCurrInstr = BattleScript_BallThrow;
     gCurrentActionFuncId = B_ACTION_EXEC_SCRIPT;
