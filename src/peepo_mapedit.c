@@ -624,6 +624,18 @@ bool8 PeepoMapEdit_TryAPressFieldMove(u8 localId)
 
 // ---- inbound packets -----------------------------------------------------
 
+// A remote/system write just landed on (rx,ry) (runtime coords). If the tile-brush
+// preview sits on that exact cell, drop the preview claim: its saved restore-entry
+// predates the write, and restoring it later would silently revert the committed
+// tile AND collision for this client only (a lasting desync until the next
+// snapshot). The preview re-shows on the next cursor step. Shared by BOTH inbound
+// cell-write paths — single edits and snapshot replays.
+static void InvalidatePreviewAt(s16 rx, s16 ry)
+{
+    if (sTilePrev && rx == sCursorX && ry == sCursorY)
+        sTilePrev = FALSE;
+}
+
 static void HandleSnapshot(const u8 *p, u32 n)
 {
     u8 g, mn, more, count;
@@ -644,6 +656,7 @@ static void HandleSnapshot(const u8 *p, u32 n)
         s16 ly = (s16)(p[off + 2] | (p[off + 3] << 8));
         u16 val = p[off + 4] | (p[off + 5] << 8);
         SetCell(lx, ly, val, 0);
+        InvalidatePreviewAt(lx + MAP_OFFSET, ly + MAP_OFFSET); // delayed snapshots hit previewed cells too
     }
     if (!more)
         DrawWholeMapView(); // redraw once the full snapshot is in
@@ -667,6 +680,7 @@ static void HandleRemoteEdit(const u8 *p, u32 n)
     SetCell(lx, ly, val, flags);
     rx = lx + MAP_OFFSET;
     ry = ly + MAP_OFFSET;
+    InvalidatePreviewAt(rx, ry);
     CurrentMapDrawMetatileAt(rx, ry); // live single-tile redraw
 }
 
