@@ -843,6 +843,7 @@ static void PlayerNotOnBikeMoving(u8 direction, u16 heldKeys)
 
     if (!(gPlayerAvatar.flags & PLAYER_AVATAR_FLAG_UNDERWATER)
      && PeepoQol_WantsRun(heldKeys) // auto-run toggle inverts the hold-B-to-run rule
+     && !(FlagGet(DN_FLAG_SEARCHING) && (heldKeys & A_BUTTON)) // DexNav sneak (hold A) outranks auto-run, like the surf branch above
      && (FlagGet(FLAG_SYS_B_DASH) || FlagGet(FLAG_PEEPO_AUTORUN)) // auto-run also grants running before the running shoes
      && IsRunningDisallowed(gObjectEvents[gPlayerAvatar.objectEventId].currentMetatileBehavior) == 0 
      && !FollowerNPCComingThroughDoor() 
