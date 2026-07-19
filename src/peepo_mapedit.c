@@ -446,8 +446,11 @@ static void ReconcileObjects(void)
             ;
         if (free >= OBJ_POOL_SIZE)
             break; // pool full — remaining in-range objects don't render (best-effort)
-        SpawnSpecialObjectEventParameterized(sObjs[i].gfx, MOVEMENT_TYPE_NONE,
-            OBJ_LOCALID_BASE + free, sObjs[i].lx + MAP_OFFSET, sObjs[i].ly + MAP_OFFSET, 3);
+        if (SpawnSpecialObjectEventParameterized(sObjs[i].gfx, MOVEMENT_TYPE_NONE,
+                OBJ_LOCALID_BASE + free, sObjs[i].lx + MAP_OFFSET, sObjs[i].ly + MAP_OFFSET, 3)
+            == OBJECT_EVENTS_COUNT)
+            continue; // spawn failed (object-event/sprite capacity) — leave the pool slot
+                      // unmapped so a later reconcile retries once capacity frees up
         sPoolObj[free] = (s16)i;
     }
 }
