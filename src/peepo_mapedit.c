@@ -449,8 +449,10 @@ static void ReconcileObjects(void)
         if (SpawnSpecialObjectEventParameterized(sObjs[i].gfx, MOVEMENT_TYPE_NONE,
                 OBJ_LOCALID_BASE + free, sObjs[i].lx + MAP_OFFSET, sObjs[i].ly + MAP_OFFSET, 3)
             == OBJECT_EVENTS_COUNT)
-            continue; // spawn failed (object-event/sprite capacity) — leave the pool slot
-                      // unmapped so a later reconcile retries once capacity frees up
+            break; // spawn failed = GLOBAL object-event/sprite exhaustion, which can't
+                   // recover inside this loop — stop rather than burn a failed attempt
+                   // (palette + sheet load each) per remaining object. The slot stays
+                   // unmapped, so the next reconcile (movement/edit/packet) retries.
         sPoolObj[free] = (s16)i;
     }
 }
