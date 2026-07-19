@@ -144,7 +144,7 @@ static void Task_DexNavWaitFadeIn(u8 taskId);
 static void Task_DexNavMain(u8 taskId);
 static void PrintCurrentSpeciesInfo(void);
 // SEARCH
-static bool8 TryStartHiddenMonFieldEffect(enum EncounterType environment, u8 xSize, u8 ySize, bool8 smallScan);
+static bool8 TryStartHiddenMonFieldEffect(enum EncounterType environment, u8 xSize, u8 ySize, bool8 smallScan, bool8 guaranteeFallback);
 static void DexNavGenerateMoveset(u16 species, u8 searchLevel, u8 encounterLevel, u16 *moveDst);
 static u16 DexNavGenerateHeldItem(u16 species, u8 searchLevel);
 static u8 DexNavGetAbilityNum(u16 species, u8 searchLevel);
@@ -153,7 +153,7 @@ static u8 DexNavTryGenerateMonLevel(u16 species, enum EncounterType environment)
 static u8 GetEncounterLevelFromMapData(u16 species, enum EncounterType environment);
 static void CreateDexNavWildMon(u16 species, u8 potential, u8 level, u8 abilityNum, u16 item, u16 *moves);
 static u8 GetPlayerDistance(s16 x, s16 y);
-static u8 DexNavPickTile(enum EncounterType environment, u8 xSize, u8 ySize, bool8 smallScan);
+static u8 DexNavPickTile(enum EncounterType environment, u8 xSize, u8 ySize, bool8 smallScan, bool8 guaranteeFallback);
 static void DexNavProximityUpdate(void);
 static void DexNavDrawIcons(void);
 static void DexNavUpdateSearchWindow(u8 proximity, u8 searchLevel);
@@ -604,23 +604,33 @@ static void DexNavProximityUpdate(void)
 }
 
 //Pick a specific tile based on environment
-static bool8 DexNavPickTile(enum EncounterType environment, u8 areaX, u8 areaY, bool8 smallScan)
+// guaranteeFallback: if the weighted admission rolls reject EVERY structurally
+// valid tile (on open water that's ~22% of scans), fall back to a uniform pick
+// among the valid tiles instead of failing. Without it a correctly played
+// relocation randomly ends the search with "got away" through no player error.
+static bool8 DexNavPickTile(enum EncounterType environment, u8 areaX, u8 areaY, bool8 smallScan, bool8 guaranteeFallback)
 {
     // area of map to cover starting from camera position {-7, -7}
     s16 topX = gSaveBlock1Ptr->pos.x - SCANSTART_X + (smallScan * 5);
     s16 topY = gSaveBlock1Ptr->pos.y - SCANSTART_Y + (smallScan * 5);
+    s16 startX = topX; // scan origin, for the cave scale's relative-coordinate term
+    s16 startY = topY;
     s16 botX = topX + areaX;
     s16 botY = topY + areaY;
     u8 i;
     bool8 nextIter;
-    u8 scale = 0;
-    u8 weight = 0;
+    s32 scale = 0;
+    bool8 structOk;   // tile usable at all: terrain + elevation + collision
+    u8 weight = 0;    // structOk AND admitted by this tile's RNG roll
     enum MapType currMapType = GetCurrentMapType();
     u8 tileBehaviour;
     u8 tileBuffer = 2;
     u8 *xPos = AllocZeroed((botX - topX) * (botY - topY) * sizeof(u8));
     u8 *yPos = AllocZeroed((botX - topX) * (botY - topY) * sizeof(u8));
+    u8 *validX = AllocZeroed((botX - topX) * (botY - topY) * sizeof(u8));
+    u8 *validY = AllocZeroed((botX - topX) * (botY - topY) * sizeof(u8));
     u32 iter = 0;
+    u32 validIter = 0;
     bool32 ret = FALSE;
 
     // loop through every tile in area and evaluate
@@ -660,6 +670,7 @@ static bool8 DexNavPickTile(enum EncounterType environment, u8 areaX, u8 areaY, 
             }
 
             weight = 0; // initiliaze weight
+            structOk = FALSE;
             switch (environment)
             {
             case ENCOUNTER_TYPE_LAND:
@@ -671,31 +682,50 @@ static bool8 DexNavPickTile(enum EncounterType environment, u8 areaX, u8 areaY, 
                         if (IsElevationMismatchAt(gObjectEvents[gPlayerAvatar.spriteId].currentElevation, topX, topY))
                             break; //occurs at same z coord
 
-                        scale = 440 - (smallScan * 200) - (GetPlayerDistance(topX, topY) / 2)  - (2 * (topX + topY));
-                        weight = ((Random() % scale) < 1) && !MapGridGetCollisionAt(topX, topY);
+                        // Scan-relative coords, not raw map coords: the raw form made
+                        // identical cave geometry admit differently by absolute map
+                        // position, and could underflow the old u8 scale into Random() % 0.
+                        scale = 440 - (smallScan * 200) - (GetPlayerDistance(topX, topY) / 2)
+                              - 2 * ((topX - startX) + (topY - startY));
+                        if (scale < 1)
+                            scale = 1;
+                        structOk = !MapGridGetCollisionAt(topX, topY);
+                        weight = structOk && ((Random() % scale) < 1);
                     }
                     else
                     {
                         // outdoors: grass
                         scale = 100 - (GetPlayerDistance(topX, topY) * 2);
-                        weight = (Random() % scale <= 5) && !MapGridGetCollisionAt(topX, topY);
+                        if (scale < 1)
+                            scale = 1;
+                        structOk = !MapGridGetCollisionAt(topX, topY);
+                        weight = structOk && (Random() % scale <= 5);
                     }
                 }
                 break;
             case ENCOUNTER_TYPE_WATER:
                 if (MetatileBehavior_IsSurfableWaterOrUnderwater(tileBehaviour))
                 {
-                    u8 scale = 320 - (smallScan * 200) - (GetPlayerDistance(topX, topY) / 2);
                     if (IsElevationMismatchAt(gObjectEvents[gPlayerAvatar.spriteId].currentElevation, topX, topY))
                         break;
 
-                    weight = (Random() % scale <= 1) && !MapGridGetCollisionAt(topX, topY);
+                    scale = 320 - (smallScan * 200) - (GetPlayerDistance(topX, topY) / 2);
+                    if (scale < 1)
+                        scale = 1;
+                    structOk = !MapGridGetCollisionAt(topX, topY);
+                    weight = structOk && (Random() % scale <= 1);
                 }
                 break;
             default:
                 break;
             }
 
+            if (structOk)
+            {
+                validX[validIter] = topX;
+                validY[validIter] = topY;
+                validIter++;
+            }
             if (weight > 0)
             {
                 xPos[iter] = topX;
@@ -717,20 +747,31 @@ static bool8 DexNavPickTile(enum EncounterType environment, u8 areaX, u8 areaY, 
         sDexNavSearchDataPtr->tileY = yPos[i];
         ret = TRUE;
     }
+    else if (guaranteeFallback && validIter > 0)
+    {
+        // Every valid tile lost its admission roll — pick uniformly instead of
+        // failing, so a search never dies on placement RNG while a usable tile exists.
+        i = Random() % validIter;
+        sDexNavSearchDataPtr->tileX = validX[i];
+        sDexNavSearchDataPtr->tileY = validY[i];
+        ret = TRUE;
+    }
 
     Free(xPos);
     Free(yPos);
+    Free(validX);
+    Free(validY);
 
     return ret;
 }
 
 
-static bool8 TryStartHiddenMonFieldEffect(enum EncounterType environment, u8 xSize, u8 ySize, bool8 smallScan)
+static bool8 TryStartHiddenMonFieldEffect(enum EncounterType environment, u8 xSize, u8 ySize, bool8 smallScan, bool8 guaranteeFallback)
 {
     enum MapType currMapType = GetCurrentMapType();
     u8 fldEffId = 0;
 
-    if (DexNavPickTile(environment, xSize, ySize, smallScan))
+    if (DexNavPickTile(environment, xSize, ySize, smallScan, guaranteeFallback))
     {
         u8 metatileBehaviour = MapGridGetMetatileBehaviorAt(sDexNavSearchDataPtr->tileX, sDexNavSearchDataPtr->tileY);
 
@@ -902,7 +943,7 @@ static void Task_InitDexNavSearch(u8 taskId)
         return;
     }
 
-    if (sDexNavSearchDataPtr->monLevel == MON_LEVEL_NONEXISTENT || !TryStartHiddenMonFieldEffect(sDexNavSearchDataPtr->environment, 12, 12, FALSE))
+    if (sDexNavSearchDataPtr->monLevel == MON_LEVEL_NONEXISTENT || !TryStartHiddenMonFieldEffect(sDexNavSearchDataPtr->environment, 12, 12, FALSE, FALSE)) // initial search: stochastic "not found nearby" is intended
     {
         DexNavSearchBail(taskId, EventScript_NotFoundNearby);
         return;
@@ -1153,7 +1194,7 @@ static void Task_DexNavSearch(u8 taskId)
     {
         FieldEffectStop(&gSprites[sDexNavSearchDataPtr->fldEffSpriteId], sDexNavSearchDataPtr->fldEffId);
 
-        if (!TryStartHiddenMonFieldEffect(sDexNavSearchDataPtr->environment, 10, 10, TRUE))
+        if (!TryStartHiddenMonFieldEffect(sDexNavSearchDataPtr->environment, 10, 10, TRUE, TRUE)) // relocation: never fail on placement RNG mid-chase
         {
             EndDexNavSearchSetupScript(EventScript_PokemonGotAway, taskId);
             return;
@@ -2641,7 +2682,7 @@ bool8 TryFindHiddenPokemon(void)
         }
 
         // find tile for hidden mon and start effect if possible
-        if (!TryStartHiddenMonFieldEffect(sDexNavSearchDataPtr->environment, 8, 8, TRUE))
+        if (!TryStartHiddenMonFieldEffect(sDexNavSearchDataPtr->environment, 8, 8, TRUE, FALSE)) // ambient hidden spawn: failing quietly is fine
             return FALSE;
 
         // exclamation mark over player
