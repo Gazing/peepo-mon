@@ -105,6 +105,10 @@ extern const u8 PeepoFollowerScript[];
 struct RemotePlayer
 {
     bool8 used;
+    bool8 ghost;        // avatar/follower object events couldn't be removed at leave/
+                        // timeout (we were in battle/menu); force-remove before the
+                        // next reconcile — survives slot reuse by a NEW peer, which
+                        // is exactly the case where stale graphics would be inherited
     u8 id;              // network id (peer slot)
     u8 mapGroup;
     u8 mapNum;
@@ -565,11 +569,25 @@ static bool8 RemoteRenderPos(struct RemotePlayer *r, s16 *outX, s16 *outY, bool8
 // the queued path one tile per finished step; snaps on big drift. Peers keep
 // animating even while we're in a menu/dialog (their sprites are re-thawed each
 // frame), so there's no backlog to snap through on exit.
+static void RemoveRemoteFollower(u32 slotIdx); // defined below; needed by the ghost sweep here
+
 static void ReconcileRemote(struct RemotePlayer *r, u32 slotIdx)
 {
     u8 localId = REMOTE_LOCALID_BASE + slotIdx;
     u8 myMapGroup = gSaveBlock1Ptr->location.mapGroup;
     u8 myMapNum = gSaveBlock1Ptr->location.mapNum;
+
+    // Slot reused by a NEW peer before the orphan sweep could run (packets drain
+    // during battle): the previous occupant's avatar/follower are still on the
+    // field and would be silently adopted with stale gender/shiny graphics.
+    // Force-remove them first so this peer spawns fresh. (Only reached when
+    // InOverworld() — the caller gates on it.)
+    if (r->ghost)
+    {
+        RemoveObjectEventByLocalIdAndMap(localId, myMapNum, myMapGroup);
+        RemoveRemoteFollower(slotIdx);
+        r->ghost = FALSE;
+    }
     s16 efx = 0, efy = 0;      // effective render position in OUR coord frame
     bool8 sameMap = FALSE;
     bool8 render = RemoteRenderPos(r, &efx, &efy, &sameMap);
@@ -929,6 +947,10 @@ void PeepoOverworld_Update(void)
                         gSaveBlock1Ptr->location.mapNum, gSaveBlock1Ptr->location.mapGroup);
                     RemoveRemoteFollower((u32)(r - sRemotes));
                 }
+                else
+                {
+                    r->ghost = TRUE; // can't touch object events now — force-remove later
+                }
                 FreeRemotePalette(r->id);
                 r->used = FALSE;
             }
@@ -999,7 +1021,22 @@ void PeepoOverworld_Update(void)
     {
         struct RemotePlayer *r = &sRemotes[i];
         if (!r->used)
+        {
+            // A peer that left or timed out while we were in a battle/menu couldn't
+            // be despawned at that moment (object events are only safe to touch in
+            // the overworld), and the return-to-field path re-materializes every
+            // still-active object event — leaving a frozen, collidable ghost until
+            // the next real map warp. Sweep the orphan here instead; both removals
+            // are existence-checked no-ops when nothing lingers.
+            if (InOverworld())
+            {
+                RemoveObjectEventByLocalIdAndMap(REMOTE_LOCALID_BASE + i,
+                    gSaveBlock1Ptr->location.mapNum, gSaveBlock1Ptr->location.mapGroup);
+                RemoveRemoteFollower(i);
+                r->ghost = FALSE; // orphans (if any) are gone
+            }
             continue;
+        }
         if ((u16)(sFrame - r->lastSeen) > REMOTE_TIMEOUT_FRAMES)
         {
             if (InOverworld())
@@ -1007,6 +1044,10 @@ void PeepoOverworld_Update(void)
                 RemoveObjectEventByLocalIdAndMap(REMOTE_LOCALID_BASE + i,
                     gSaveBlock1Ptr->location.mapNum, gSaveBlock1Ptr->location.mapGroup);
                 RemoveRemoteFollower(i);
+            }
+            else
+            {
+                r->ghost = TRUE; // can't touch object events now — force-remove later
             }
             FreeRemotePalette(r->id);
             r->used = FALSE;
