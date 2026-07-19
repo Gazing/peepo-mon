@@ -2356,6 +2356,11 @@ static void CloseSummaryScreen(u8 taskId)
         m4aMPlayVolumeControl(&gMPlayInfo_BGM, TRACKS_ALL, 0x100);
         if (gMonSpritesGfxPtr == NULL)
             DestroyMonSpritesGfxManager(MON_SPR_GFX_MANAGER_A);
+        // This screen's VBlank handler dereferences sMonSummaryScreen (idle-anim
+        // timer), so it must be detached BEFORE the struct is freed — the next
+        // screen installs its own handler on the following frame. Without this,
+        // the same frame's VBlank reads (and writes a counter) through freed memory.
+        SetVBlankCallback(NULL);
         FreeSummaryScreen();
         DestroyTask(taskId);
     }
