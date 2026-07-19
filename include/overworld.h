@@ -87,6 +87,7 @@ struct MapHeader const *const Overworld_GetMapHeaderByGroupAndId(u16 mapGroup, u
 struct MapHeader const *const GetDestinationWarpMapHeader(void);
 void WarpIntoMap(void);
 void SetWarpDestination(s8 mapGroup, s8 mapNum, s8 warpId, s8 x, s8 y);
+void SetWarpDestinationXY16(s8 mapGroup, s8 mapNum, s16 x, s16 y); // peepo: no s8 truncation of x/y
 void SetWarpDestinationToMapWarp(s8 mapGroup, s8 mapNum, s8 warpId);
 void SetDynamicWarp(s32 unused, s8 mapGroup, s8 mapNum, s8 warpId);
 void SetDynamicWarpWithCoords(s32 unused, s8 mapGroup, s8 mapNum, s8 warpId, s8 x, s8 y);

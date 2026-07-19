@@ -690,6 +690,19 @@ void SetWarpDestination(s8 mapGroup, s8 mapNum, s8 warpId, s8 x, s8 y)
     SetWarpData(&sWarpDestination, mapGroup, mapNum, warpId, x, y);
 }
 
+// peepo: s16-capable position warp. SetWarpDestination's s8 x/y parameters silently
+// truncate map-local coords >= 128 even though WarpData stores s16 — only the
+// parameter types were the bottleneck. Needed for warping to arbitrary player
+// positions on large maps.
+void SetWarpDestinationXY16(s8 mapGroup, s8 mapNum, s16 x, s16 y)
+{
+    sWarpDestination.mapGroup = mapGroup;
+    sWarpDestination.mapNum = mapNum;
+    sWarpDestination.warpId = WARP_ID_NONE;
+    sWarpDestination.x = x;
+    sWarpDestination.y = y;
+}
+
 void SetWarpDestinationToMapWarp(s8 mapGroup, s8 mapNum, s8 warpId)
 {
     SetWarpDestination(mapGroup, mapNum, warpId, -1, -1);
