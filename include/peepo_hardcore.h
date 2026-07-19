@@ -22,7 +22,11 @@ void PeepoHardcore_ReleaseFainted(void);
 // Per-frame tick (from the main loop): fires ReleaseFainted on battle exit.
 void PeepoHardcore_Tick(void);
 
-// On whiteout: show a game-over message, erase the save, hard-reset to title.
-void PeepoHardcore_OnWhiteOut(void);
+// Hardcore game over. CB2_WhiteOut installs the field callback in place of the
+// normal warp-exit fade when hardcore is on; it erases the save, shows the
+// game-over message, and the script's callnative reboots to the title screen.
+struct ScriptContext;
+void PeepoHardcore_FieldCB_GameOver(void);
+void PeepoHardcore_GameOverReset(struct ScriptContext *ctx);
 
 #endif // GUARD_PEEPO_HARDCORE_H

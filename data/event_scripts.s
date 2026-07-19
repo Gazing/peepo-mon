@@ -1205,6 +1205,7 @@ PeepoHealText:
 @ erased and the game resets to the title screen. See src/peepo_hardcore.c.
 EventScript_PeepoHardcoreGameOver::
 	msgbox PeepoHardcoreGameOverText, MSGBOX_DEFAULT
+	callnative PeepoHardcore_GameOverReset
 	end
 
 PeepoHardcoreGameOverText:

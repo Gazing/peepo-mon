@@ -378,11 +378,9 @@ static void (*const sMovementStatusHandler[])(struct LinkPlayerObjectEvent *, st
 // code
 void DoWhiteOut(void)
 {
-    if (PeepoHardcore_IsEnabled())
-    {
-        PeepoHardcore_OnWhiteOut(); // wipes the save + resets to title (never returns)
-        return;
-    }
+    // Hardcore game over rides this same warp-home path; CB2_WhiteOut then swaps
+    // the field callback for PeepoHardcore_FieldCB_GameOver (erase + message +
+    // reset). Running the message synchronously here would hang — see peepo_hardcore.c.
     RunScriptImmediately(EventScript_WhiteOut);
     HealPlayerParty();
     Overworld_ResetStateAfterWhiteOut();
@@ -1823,7 +1821,9 @@ void CB2_WhiteOut(void)
         ResetInitialPlayerAvatarState();
         ScriptContext_Init();
         UnlockPlayerFieldControls();
-        if (IsWhiteoutCutscene())
+        if (PeepoHardcore_IsEnabled())
+            gFieldCallback = PeepoHardcore_FieldCB_GameOver; // game over: erase save + message + reset
+        else if (IsWhiteoutCutscene())
             gFieldCallback = FieldCB_RushInjuredPokemonToCenter;
         else
             gFieldCallback = FieldCB_WarpExitFadeFromBlack;
