@@ -526,6 +526,12 @@ void PeepoMapEdit_DoFieldMovePlaced(void)
         {
             DelObj(sFMLx, sFMLy);
             SendObj(sFMLx, sFMLy, 0, EDIT_DELETE);
+            // Reconcile NOW, not just at the end: SetObj below reuses this freed
+            // sObjs index in place, and the render pool is keyed by index — without
+            // an intervening despawn the local object event never moves, leaving the
+            // boulder (and its collision) at the source tile for us while peers
+            // (whose remote path reconciles per packet) see it at the destination.
+            ReconcileObjects();
             SetObj(nlx, nly, sFMGfx);
             SendObj(nlx, nly, sFMGfx, 0);
             ReconcileObjects();
