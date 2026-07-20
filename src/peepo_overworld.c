@@ -329,7 +329,8 @@ static void HandlePos(const u8 *p, u32 n)
 {
     struct RemotePlayer *r;
     u8 id, nmg, nmn, ndir;
-    s16 nx, ny, dx, dy, total;
+    s16 nx, ny;
+    s32 dx, dy, total; // s32, not s16: a large same-map delta must not wrap the snap-distance test below (a wrapped total slips the snap guard and drives ~65k no-op enqueue calls per packet — a floodable soft-DoS)
     bool8 isNew = FALSE;
     if (n < POS_CORE_LEN)
         return;
