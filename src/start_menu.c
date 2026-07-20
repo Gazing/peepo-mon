@@ -91,7 +91,11 @@ EWRAM_DATA static u8 sSafariBallsWindowId = 0;
 EWRAM_DATA static u8 sBattlePyramidFloorWindowId = 0;
 EWRAM_DATA static u8 sStartMenuCursorPos = 0;
 EWRAM_DATA static u8 sNumStartMenuActions = 0;
-EWRAM_DATA static u8 sCurrentStartMenuActions[9] = {0};
+// 10 = the normal menu's pre-display maximum: vanilla's 8 plus the peepo
+// DexNav and Fly entries. At [9], the 10th append wrote past the array into
+// padding under the shipping GCC 10 -O2 layout, but remained UB that can hit
+// live state under other layouts; its reliable symptom was an off-screen EXIT.
+EWRAM_DATA static u8 sCurrentStartMenuActions[10] = {0};
 EWRAM_DATA static s8 sInitStartMenuData[2] = {0};
 
 EWRAM_DATA static u8 (*sSaveDialogCallback)(void) = NULL;
@@ -332,6 +336,11 @@ static void BuildStartMenuActions(void)
 
 static void AddStartMenuAction(u8 action)
 {
+    // Capacity guard: AppendToList writes unchecked, and the normal menu can now
+    // reach 10 entries (vanilla 8 + DexNav + Fly). Guard here rather than in the
+    // shared AppendToList, which party_menu also uses on a different array.
+    if (sNumStartMenuActions >= ARRAY_COUNT(sCurrentStartMenuActions))
+        return;
     AppendToList(sCurrentStartMenuActions, &sNumStartMenuActions, action);
 }
 
@@ -356,7 +365,12 @@ static void BuildNormalStartMenu(void)
     AddStartMenuAction(MENU_ACTION_PLAYER);
     AddStartMenuAction(MENU_ACTION_SAVE);
     AddStartMenuAction(MENU_ACTION_OPTION);
-    AddStartMenuAction(MENU_ACTION_EXIT);
+    // A 10-row menu draws its last row below the 160px screen (invisible but
+    // still selectable). With 9 substantive actions, omit the explicit EXIT —
+    // B/START already close the menu, the same precedent BuildDebugStartMenu
+    // uses. Everything functional stays visible and selectable.
+    if (sNumStartMenuActions < 9)
+        AddStartMenuAction(MENU_ACTION_EXIT);
 }
 
 static void BuildDebugStartMenu(void)
