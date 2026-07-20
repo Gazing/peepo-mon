@@ -891,6 +891,19 @@ void FieldEffectActiveListAdd(u8 id)
     }
 }
 
+// TRUE when every active-list slot is occupied, so the next FieldEffectActiveListAdd
+// would silently do nothing. Lets a caller tell whether its own Add actually inserted.
+bool8 FieldEffectActiveListFull(void)
+{
+    u8 i;
+    for (i = 0; i < ARRAY_COUNT(sActiveList); i++)
+    {
+        if (sActiveList[i] == 0xFF)
+            return FALSE;
+    }
+    return TRUE;
+}
+
 void FieldEffectActiveListRemove(u8 id)
 {
     u8 i;
