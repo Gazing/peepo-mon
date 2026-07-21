@@ -820,9 +820,24 @@ static bool8 TryStartHiddenMonFieldEffect(enum EncounterType environment, u8 xSi
             gFieldEffectArguments[1] = sDexNavSearchDataPtr->tileY;
             gFieldEffectArguments[2] = 0xFF; // subpriority
             gFieldEffectArguments[3] = 2;   //priority
+            // Snapshot list fullness first: FieldEffectStart's ActiveListAdd
+            // silently no-ops when all 32 slots are taken, so a failed start on a
+            // full list added nothing and must NOT be "cleaned up" (Remove would
+            // yank an unrelated live registration of the same id — several DexNav
+            // effect ids, e.g. FLDEFF_BERRY_TREE_GROWTH_SPARKLE, are shared).
+            bool8 fxListWasFull = FieldEffectActiveListFull();
             sDexNavSearchDataPtr->fldEffSpriteId = FieldEffectStart(fldEffId);
             if (sDexNavSearchDataPtr->fldEffSpriteId == MAX_SPRITES)
+            {
+                // Start registered fldEffId, then its sprite failed to allocate
+                // (OAM slots or its OBJ tiles exhausted); with no sprite, nothing
+                // will ever Stop it, so it would leak an active-list slot until the
+                // next map load. Undo OUR registration only if the list had room
+                // for it (there is no sprite to FieldEffectStop).
+                if (!fxListWasFull)
+                    FieldEffectActiveListRemove(fldEffId);
                 return FALSE;
+            }
 
             sDexNavSearchDataPtr->fldEffId = fldEffId;
             return TRUE;
