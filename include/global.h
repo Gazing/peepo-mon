@@ -591,6 +591,11 @@ struct SaveBlock2
              //u16 padding1:4;
              //u16 padding2;
     /*0x18*/ struct Pokedex pokedex;
+    // UPSTREAM-MERGE HAZARD: peepoRandoFlags repurposes one byte of upstream's
+    // filler_90. If a future expansion release allocates a real field at 0x90,
+    // git may merge both silently (no conflict, no compile error) and corrupt
+    // saves. Hand-audit this offset on every upstream bump. (peepoCaughtRoutes
+    // at 0x988 has the same hazard.)
     /*0x90*/ u8 peepoRandoFlags; // RANDO_F_* bits chosen at new game (peepo_rando)
              u8 filler_90[0x7];
     /*0x98*/ struct Time localTimeOffset;
@@ -1091,6 +1096,9 @@ struct SaveBlock1
     /*0x560*/ struct Bag bag;
     /*0x848*/ struct Pokeblock pokeblocks[POKEBLOCKS_COUNT];
 #if FREE_EXTRA_SEEN_FLAGS_SAVEBLOCK1 == FALSE
+    // UPSTREAM-MERGE HAZARD: peepoCaughtRoutes repurposes upstream filler1 bytes.
+    // Silent-corruption risk on an upstream bump if those bytes get reclaimed --
+    // hand-audit this offset when bumping (see the note at peepoRandoFlags, 0x90).
     /*0x988*/ u8 peepoCaughtRoutes[0x20]; // hardcore nuzlocke: bit per map-section already caught on
               u8 filler1[0x14];           // (remainder of the old dead "Dex Flags" filler)
 #endif //FREE_EXTRA_SEEN_FLAGS_SAVEBLOCK1

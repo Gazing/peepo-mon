@@ -18,7 +18,7 @@ Multiplayer Pokémon Emerald romhack base: [rh-hideout/pokeemerald-expansion](ht
 | `peepo_hardcore.c` | Enforced nuzlocke: faint = release, whiteout = save wipe, one catch per route |
 | `bw_summary_screen.c` | Vendored ravepossum BW summary screen (third-party, integrated over 1.14) |
 
-`main_menu.c` carries a rewritten new-game flow (randomizer/hardcore toggles). Hooks into stock files are marked with `peepo` comments.
+`main_menu.c` adds the randomizer/hardcore new-game screens as a contiguous ~313-line append plus three redirect lines (`gTasks[taskId].func = …`), not a rewrite of the stock flow. Most hooks into stock files carry a `peepo` comment, but a few don't (evo-stone mart pricing in `item.c` + `data/maps/RustboroCity_Mart/scripts.inc`, `include/config/dexnav.h`, `src/battle_controller_player.c`) — so `grep -i peepo` is not exhaustive; the authoritative list of peepo changes is `git diff da5a2ca7 -- <path>` (the 1.14.0 base).
 
 ## Invariants that have already caused real bugs — check these before changing related code
 
@@ -27,6 +27,10 @@ Multiplayer Pokémon Emerald romhack base: [rh-hideout/pokeemerald-expansion](ht
 - **DexNav search lifecycle**: `DN_FLAG_SEARCHING` is set in `Task_SetUpDexNavSearch` for both search modes and must be cleared on every end path; the search task's function pointer changes during hidden-mon reveal, so anything that looks tasks up by function must handle both `Task_DexNavSearch` and `Task_RevealHiddenMon`.
 - **Map-editor render bookkeeping is keyed by `sObjs` index only.** Reusing an index for a logically different/moved object without a `ReconcileObjects()` in between leaves the on-field object event stale (the Strength-push desync).
 - **`SetWarpDestination`'s x/y parameters are s8** even though `WarpData` stores s16 — map-local coords ≥ 128 truncate. Use `SetWarpDestinationXY16` (PR #3) for arbitrary positions.
+
+## Before an upstream (pokeemerald-expansion) bump — hand-audit gate
+
+The randomizer/hardcore save data repurposes upstream **filler bytes**: `peepoRandoFlags` at SaveBlock2 `0x90` (from `filler_90`) and `peepoCaughtRoutes` at SaveBlock1 `0x988` (from `filler1`). Upstream reclaims filler routinely. If a new release allocates those same bytes, git merges both **silently** — no conflict marker, no compile error — and corrupts saves. Unlike every other hook (which fails loudly on a bump), this one is invisible. **On any upstream bump, hand-check both offsets in `include/global.h` before shipping.** Merge-labor ranking otherwise: `bw_summary_screen.c` (vendored, pinned to 1.14 APIs, merges clean and breaks at runtime — revalidate it) and `src/dexnav.c` (~46 hunks) are the real work; the battle-file hooks are tiny and re-apply trivially.
 
 ## Known debt
 
