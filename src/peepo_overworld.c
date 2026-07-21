@@ -10,6 +10,7 @@
 #include "wild_encounter.h"
 #include "constants/event_objects.h"
 #include "constants/event_object_movement.h"
+#include "constants/species.h" // NUM_SPECIES / SPECIES_NONE (validate network follower species)
 #include "main.h"
 #include "save.h"
 #include "task.h"
@@ -355,6 +356,8 @@ static void HandlePos(const u8 *p, u32 n)
     if (n >= POS_CORE_LEN + 3) // follower tail: species (2) + flags (1)
     {
         r->followSpecies = (u16)(p[10] | (p[11] << 8));
+        if (r->followSpecies >= NUM_SPECIES) // an out-of-range species reads gSpeciesInfo[] before the graphics guard; 0 already means "no follower shown"
+            r->followSpecies = SPECIES_NONE;
         r->followFlags = p[12];
     }
     if (n >= POS_LEN) // accent tail: color (2), RGB555 | 0x8000 (0 = unchosen)
