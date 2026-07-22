@@ -35,7 +35,6 @@ The randomizer/hardcore save data repurposes upstream **filler bytes**: `peepoRa
 ## Known debt
 
 - Littleroot test-starter hook in `wild_encounter.c` (`sPeepoTestStarters`) ships ungated — its own comment says remove for production.
-- Network-supplied `mapGroup`/`mapNum` are dereferenced without range validation (`gMapGroups[][]`) — hostile-packet OOB read.
 
 ## Contributing (human or AI-assisted)
 

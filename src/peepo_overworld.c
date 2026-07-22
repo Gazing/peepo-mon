@@ -10,6 +10,8 @@
 #include "wild_encounter.h"
 #include "constants/event_objects.h"
 #include "constants/event_object_movement.h"
+#include "constants/map_groups.h" // MAP_GROUPS_COUNT (validate network-supplied map ids)
+#include "data/map_group_count.h" // MAP_GROUP_COUNT[] (per-group map count)
 #include "constants/species.h" // NUM_SPECIES / SPECIES_NONE (validate network follower species)
 #include "main.h"
 #include "save.h"
@@ -337,6 +339,18 @@ static void HandlePos(const u8 *p, u32 n)
     id = p[1];
     if (sHasLocalId && id == sLocalId)
         return; // ignore our own echo
+
+    // Validate the peer-supplied map id BEFORE it can be stored. A malformed pair
+    // is later fed to Overworld_GetMapHeaderByGroupAndId -> gMapGroups[mapGroup]
+    // [mapNum] (an unchecked deref) when the room owner teleports to this peer;
+    // an out-of-range group or map would read arbitrary memory. Reject atomically
+    // here, before AllocRemote claims a slot or lastSeen is refreshed, so a bad
+    // packet can neither be stored nor keep a stale peer alive.
+    nmg = p[2];
+    nmn = p[3];
+    if (nmg >= MAP_GROUPS_COUNT || nmn >= MAP_GROUP_COUNT[nmg])
+        return;
+
     r = FindRemote(id);
     if (r == NULL)
     {
@@ -346,8 +360,6 @@ static void HandlePos(const u8 *p, u32 n)
     if (r == NULL)
         return;
 
-    nmg = p[2];
-    nmn = p[3];
     nx = (s16)(p[4] | (p[5] << 8));
     ny = (s16)(p[6] | (p[7] << 8));
     ndir = p[8];
