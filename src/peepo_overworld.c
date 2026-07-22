@@ -364,6 +364,8 @@ static void HandlePos(const u8 *p, u32 n)
     nx = (s16)(p[4] | (p[5] << 8));
     ny = (s16)(p[6] | (p[7] << 8));
     ndir = p[8];
+    if (ndir > DIR_EAST) // remote avatars only face cardinally; dir==9 slips dirn_to_anim's off-by-one guard into a one-past-array read
+        ndir = DIR_SOUTH;
     r->dir = ndir;
     r->gender = p[9];
     if (n >= POS_CORE_LEN + 3) // follower tail: species (2) + flags (1)
