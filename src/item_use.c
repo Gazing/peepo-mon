@@ -1,6 +1,7 @@
 #include "global.h"
 #include "item_use.h"
 #include "battle.h"
+#include "peepo_hardcore.h" // route-block check before Bag ball consumption
 #include "battle_anim.h"
 #include "battle_pyramid.h"
 #include "battle_pyramid_bag.h"
@@ -1376,7 +1377,15 @@ void ItemUseInBattle_BagMenu(u8 taskId)
     else
     {
         PlaySE(SE_SELECT);
-        if (!GetItemImportance(gSpecialVar_ItemId) && !(B_TRY_CATCH_TRAINER_BALL >= GEN_4 && (GetItemBattleUsage(gSpecialVar_ItemId) == EFFECT_ITEM_THROW_BALL) && (gBattleTypeFlags & BATTLE_TYPE_TRAINER)))
+        if (!GetItemImportance(gSpecialVar_ItemId)
+            && !(B_TRY_CATCH_TRAINER_BALL >= GEN_4 && (GetItemBattleUsage(gSpecialVar_ItemId) == EFFECT_ITEM_THROW_BALL) && (gBattleTypeFlags & BATTLE_TYPE_TRAINER))
+            // peepo: same idiom as the trainer-ball case above — don't consume a ball
+            // the hardcore route-block will bounce. This Bag path removes the item
+            // long before Cmd_handleballthrow's block branch, which has no bag refund
+            // (a refund would reorder the pocket for a last-copy ball).
+            && !((GetItemBattleUsage(gSpecialVar_ItemId) == EFFECT_ITEM_THROW_BALL)
+                 && !(gBattleTypeFlags & (BATTLE_TYPE_TRAINER | BATTLE_TYPE_SAFARI))
+                 && PeepoHardcore_IsEnabled() && PeepoHardcore_RouteAlreadyCaught()))
             RemoveUsedItem();
         ScheduleBgCopyTilemapToVram(2);
         if (CurrentBattlePyramidLocation() == PYRAMID_LOCATION_NONE)
