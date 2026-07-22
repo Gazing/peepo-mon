@@ -461,11 +461,13 @@ static void AddSearchWindow(u8 width)
     if (sDexNavSearchDataPtr->tileY > (gSaveBlock1Ptr->pos.y + 7))
         y = 1;  //draw at top if chosen tile is below
 
-    LoadDexNavWindowGfx(sDexNavSearchDataPtr->windowId, 0x1d5, 14 * 16);
-
     SetWindowTemplateFields(&template, 0, 1, y, width, 3, 14, 8);
 
     sDexNavSearchDataPtr->windowId = AddWindow(&template);
+    // Load gfx AFTER the window exists: the old order loaded against whatever id
+    // the struct still held — a removed window's dummy template on re-reveal, or
+    // the WINDOW_NONE sentinel after the reveal-race fix (an out-of-range index).
+    LoadDexNavWindowGfx(sDexNavSearchDataPtr->windowId, 0x1d5, 14 * 16);
     FillWindowPixelBuffer(sDexNavSearchDataPtr->windowId, PIXEL_FILL(1));
     PutWindowTilemap(sDexNavSearchDataPtr->windowId);
     CopyWindowToVram(sDexNavSearchDataPtr->windowId, 3);
@@ -581,10 +583,14 @@ static void RemoveDexNavWindowAndGfx(void)
     FreeSpritePaletteByTag(HELD_ITEM_TAG);
     SafeFreeMonIconPalette(sDexNavSearchDataPtr->species);
 
-    // remove window
-    ClearStdWindowAndFrameToTransparent(sDexNavSearchDataPtr->windowId, FALSE);
-    CopyWindowToVram(sDexNavSearchDataPtr->windowId, 3);
-    RemoveWindow(sDexNavSearchDataPtr->windowId);
+    // remove window — guarded: the hidden-mon reveal branch removes it early and
+    // sentinels the id, and RemoveWindow is not safe to run twice on the same id.
+    if (sDexNavSearchDataPtr->windowId != WINDOW_NONE)
+    {
+        ClearStdWindowAndFrameToTransparent(sDexNavSearchDataPtr->windowId, FALSE);
+        CopyWindowToVram(sDexNavSearchDataPtr->windowId, 3);
+        RemoveWindow(sDexNavSearchDataPtr->windowId);
+    }
 }
 
 
@@ -1196,6 +1202,13 @@ static void Task_DexNavSearch(u8 taskId)
         CopyWindowToVram(sDexNavSearchDataPtr->windowId, 3);
         RemoveWindow(sDexNavSearchDataPtr->windowId);
         DestroySprite(&gSprites[sDexNavSearchDataPtr->iconSpriteId]);
+        // Sentinel both ids NOW: if the search is torn down during the one-frame
+        // reveal window (map-seam ResetDexNavSearch), RemoveDexNavWindowAndGfx
+        // must not remove this window or destroy this sprite slot a second time
+        // (RemoveWindow isn't idempotent; the sprite slot may have been reused).
+        // Task_RevealHiddenMon assigns fresh ids when it draws the revealed UI.
+        sDexNavSearchDataPtr->windowId = WINDOW_NONE;
+        sDexNavSearchDataPtr->iconSpriteId = MAX_SPRITES;
         task->tRevealed = TRUE; //regular dexnav search
         //sDexNavSearchDataPtr->hiddenSearch = FALSE; //now its a regular dexnav search
         task->func = Task_RevealHiddenMon;
@@ -2783,10 +2796,28 @@ void TryIncrementSpeciesSearchLevel()
 
 void ResetDexNavSearch(void)
 {
+    u8 taskId;
+
     gSaveBlock3Ptr->dexNavChain = 0;    //reset dex nav chaining on new map
     VarSet(DN_VAR_STEP_COUNTER, 0); //reset hidden pokemon step counter
     if (FlagGet(DN_FLAG_SEARCHING))
-        EndDexNavSearch(FindTaskIdByFunc(Task_DexNavSearch));   //moving to new map ends dexnav search
+    {
+        // The live search task spends exactly one frame as Task_RevealHiddenMon
+        // during a hidden-mon reveal. A seamless map-connection step landing on
+        // that frame made the Task_DexNavSearch lookup return TASK_NONE (0xFF),
+        // which DestroyTask would use to index far past gTasks[16], and the
+        // teardown would free the search state under the still-live task — OOB
+        // write + use-after-free. Look up both functions and never pass
+        // TASK_NONE onward. (Upstream later restructured this teardown to be
+        // task-agnostic, which removes the hazard class entirely.)
+        taskId = FindTaskIdByFunc(Task_DexNavSearch);
+        if (taskId == TASK_NONE)
+            taskId = FindTaskIdByFunc(Task_RevealHiddenMon);
+        if (taskId != TASK_NONE)
+            EndDexNavSearch(taskId);   //moving to new map ends dexnav search
+        else
+            FlagClear(DN_FLAG_SEARCHING); // no live task despite the flag: clear it, nothing to tear down
+    }
 }
 
 void IncrementDexNavChain(void)
