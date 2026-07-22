@@ -2696,6 +2696,8 @@ bool8 TryFindHiddenPokemon(void)
             return FALSE;
 
         sDexNavSearchDataPtr = AllocZeroed(sizeof(struct DexNavSearch));
+        if (sDexNavSearchDataPtr == NULL)
+            return FALSE; // allocation failed — nothing to search or free
 
         // init search data
         sDexNavSearchDataPtr->isHiddenMon = isHiddenMon;
@@ -2705,13 +2707,16 @@ bool8 TryFindHiddenPokemon(void)
         sDexNavSearchDataPtr->monLevel = DexNavTryGenerateMonLevel(species, environment);
         if (sDexNavSearchDataPtr->monLevel == MON_LEVEL_NONEXISTENT)
         {
-            Free(sDexNavSearchDataPtr);
+            TRY_FREE_AND_SET_NULL(sDexNavSearchDataPtr); // was Free() without null -> dangling global
             return FALSE;
         }
 
         // find tile for hidden mon and start effect if possible
         if (!TryStartHiddenMonFieldEffect(sDexNavSearchDataPtr->environment, 8, 8, TRUE, FALSE)) // ambient hidden spawn: failing quietly is fine
+        {
+            TRY_FREE_AND_SET_NULL(sDexNavSearchDataPtr); // was leaking the allocation on this exit
             return FALSE;
+        }
 
         // exclamation mark over player
         gFieldEffectArguments[0] = gSaveBlock1Ptr->pos.x;
